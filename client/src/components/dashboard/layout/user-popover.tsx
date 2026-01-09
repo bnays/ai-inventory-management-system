@@ -58,11 +58,11 @@ export function UserPopover({ anchorEl, onClose, open }: UserPopoverProps): Reac
     >
         <Box sx={{ p: '16px 20px ' }}>
             <Typography variant="subtitle1">
-                {/* Cast to string or provide a fallback to satisfy TypeScript */}
-                {(user?.firstName as string) || 'User'} {(user?.lastName as string) || ''}
+                {/* Use optional chaining and fallbacks to satisfy TypeScript */}
+                {String(user?.firstName ?? 'User')} {String(user?.lastName ?? '')}
             </Typography>
             <Typography color="text.secondary" variant="body2">
-                {(user?.email as string) || ''}
+                {String(user?.email ?? '')}
             </Typography>
         </Box>
       <Divider />
