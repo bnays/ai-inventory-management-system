@@ -1,59 +1,50 @@
 'use client';
 
 import * as React from 'react';
-import Avatar from '@mui/material/Avatar';
-import Box from '@mui/material/Box';
-import Card from '@mui/material/Card';
-import Checkbox from '@mui/material/Checkbox';
-import Divider from '@mui/material/Divider';
-import Stack from '@mui/material/Stack';
-import Table from '@mui/material/Table';
-import TableBody from '@mui/material/TableBody';
-import TableCell from '@mui/material/TableCell';
-import TableHead from '@mui/material/TableHead';
-import TablePagination from '@mui/material/TablePagination';
-import TableRow from '@mui/material/TableRow';
-import Typography from '@mui/material/Typography';
-import dayjs from 'dayjs';
+import {
+  Box,
+  Card,
+  Checkbox,
+  Chip,
+  Divider,
+  Stack,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TablePagination,
+  TableRow,
+  Typography,
+} from '@mui/material';
 
-import { useSelection } from '@/hooks/use-selection';
-
-function noop(): void {
-  // do nothing
-}
-
-export interface Customer {
-  id: string;
-  avatar: string;
-  name: string;
-  email: string;
-  address: { city: string; state: string; country: string; street: string };
-  phone: string;
-  createdAt: Date;
+export interface Product {
+  product_id: string;
+  product_name: string;
+  sku: string;
+  category: string;
+  unit_price: number;
+  quantity_on_hand: number;
+  reorder_level: number;
 }
 
 interface ProductsTableProps {
   count?: number;
   page?: number;
-  rows?: Customer[];
+  rows?: Product[];
   rowsPerPage?: number;
+  // ADD THESE TWO PROPS TO FIX THE ERROR
+  onPageChange: (event: unknown, newPage: number) => void;
+  onRowsPerPageChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
 }
 
 export function ProductsTable({
   count = 0,
   rows = [],
   page = 0,
-  rowsPerPage = 0,
+  rowsPerPage = 10,
+  onPageChange,
+  onRowsPerPageChange,
 }: ProductsTableProps): React.JSX.Element {
-  const rowIds = React.useMemo(() => {
-    return rows.map((customer) => customer.id);
-  }, [rows]);
-
-  const { selectAll, deselectAll, selectOne, deselectOne, selected } = useSelection(rowIds);
-
-  const selectedSome = (selected?.size ?? 0) > 0 && (selected?.size ?? 0) < rows.length;
-  const selectedAll = rows.length > 0 && selected?.size === rows.length;
-
   return (
     <Card>
       <Box sx={{ overflowX: 'auto' }}>
@@ -61,67 +52,59 @@ export function ProductsTable({
           <TableHead>
             <TableRow>
               <TableCell padding="checkbox">
-                <Checkbox
-                  checked={selectedAll}
-                  indeterminate={selectedSome}
-                  onChange={(event) => {
-                    if (event.target.checked) {
-                      selectAll();
-                    } else {
-                      deselectAll();
-                    }
-                  }}
-                />
+                <Checkbox />
               </TableCell>
-              <TableCell>Name</TableCell>
-              <TableCell>Email</TableCell>
-              <TableCell>Location</TableCell>
-              <TableCell>Phone</TableCell>
-              <TableCell>Signed Up</TableCell>
+              <TableCell>Product Name</TableCell>
+              <TableCell>SKU</TableCell>
+              <TableCell>Category</TableCell>
+              <TableCell>Price</TableCell>
+              <TableCell>Stock Level</TableCell>
+              <TableCell>Status</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {rows.map((row) => {
-              const isSelected = selected?.has(row.id);
-
+              const isLowStock = row.quantity_on_hand <= row.reorder_level;
+              
               return (
-                <TableRow hover key={row.id} selected={isSelected}>
+                <TableRow hover key={row.product_id}>
                   <TableCell padding="checkbox">
-                    <Checkbox
-                      checked={isSelected}
-                      onChange={(event) => {
-                        if (event.target.checked) {
-                          selectOne(row.id);
-                        } else {
-                          deselectOne(row.id);
-                        }
-                      }}
+                    <Checkbox />
+                  </TableCell>
+                  <TableCell>
+                    <Typography variant="subtitle2">{row.product_name}</Typography>
+                  </TableCell>
+                  <TableCell>{row.sku}</TableCell>
+                  <TableCell>{row.category}</TableCell>
+                  <TableCell>${Number(row.unit_price).toFixed(2)}</TableCell>
+                  <TableCell>{row.quantity_on_hand}</TableCell>
+                  <TableCell>
+                    <Chip
+                      label={isLowStock ? 'Low Stock' : 'In Stock'}
+                      color={isLowStock ? 'error' : 'success'}
+                      size="small"
                     />
                   </TableCell>
-                  <TableCell>
-                    <Stack sx={{ alignItems: 'center' }} direction="row" spacing={2}>
-                      <Avatar src={row.avatar} />
-                      <Typography variant="subtitle2">{row.name}</Typography>
-                    </Stack>
-                  </TableCell>
-                  <TableCell>{row.email}</TableCell>
-                  <TableCell>
-                    {row.address.city}, {row.address.state}, {row.address.country}
-                  </TableCell>
-                  <TableCell>{row.phone}</TableCell>
-                  <TableCell>{dayjs(row.createdAt).format('MMM D, YYYY')}</TableCell>
                 </TableRow>
               );
             })}
+            {rows.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={7} align="center" sx={{ py: 3 }}>
+                  No products found in the warehouse.
+                </TableCell>
+              </TableRow>
+            )}
           </TableBody>
         </Table>
       </Box>
       <Divider />
+      {/* CONNECT TO THE PROPS FROM CONTEXT */}
       <TablePagination
         component="div"
         count={count}
-        onPageChange={noop}
-        onRowsPerPageChange={noop}
+        onPageChange={onPageChange}
+        onRowsPerPageChange={onRowsPerPageChange}
         page={page}
         rowsPerPage={rowsPerPage}
         rowsPerPageOptions={[5, 10, 25]}
