@@ -50,25 +50,28 @@ export function SignUpForm(): React.JSX.Element {
 
   const onSubmit = React.useCallback(
     async (values: Values): Promise<void> => {
-      setIsPending(true);
+        setIsPending(true);
 
-      const { error } = await authClient.signUp(values);
+        const payload = {
+            firstName: values.firstName,
+            lastName: values.lastName,
+            email: values.email,
+            password: values.password
+        };
 
-      if (error) {
-        setError('root', { type: 'server', message: error });
-        setIsPending(false);
-        return;
-      }
+        const { error } = await authClient.signUp(payload);
 
-      // Refresh the auth state
-      await checkSession?.();
+        if (error) {
+            setError('root', { type: 'server', message: error });
+            setIsPending(false);
+            return;
+        }
 
-      // UserProvider, for this case, will not refresh the router
-      // After refresh, GuestGuard will handle the redirect
-      router.refresh();
+        // 2. Explicitly redirect to the sign in page
+        router.push(paths.auth.signIn);
     },
-    [checkSession, router, setError]
-  );
+        [router, setError]
+    );
 
   return (
     <Stack spacing={3}>
@@ -76,11 +79,14 @@ export function SignUpForm(): React.JSX.Element {
         <Typography variant="h4">Sign up</Typography>
         <Typography color="text.secondary" variant="body2">
           Already have an account?{' '}
-            <NextLink href={paths.auth.signIn} style={{ textDecoration: 'none' }}>
-                <Link underline="hover" variant="subtitle2">
-                Sign up
-                </Link>
-            </NextLink>
+          <Link 
+                component={NextLink} 
+                href={paths.auth.signIn} 
+                underline="hover" 
+                variant="subtitle2"
+            >
+                Sign in
+        </Link>
         </Typography>
       </Stack>
       <form onSubmit={handleSubmit(onSubmit)}>
@@ -100,10 +106,10 @@ export function SignUpForm(): React.JSX.Element {
             control={control}
             name="lastName"
             render={({ field }) => (
-              <FormControl error={Boolean(errors.firstName)}>
+              <FormControl error={Boolean(errors.lastName)}>
                 <InputLabel>Last name</InputLabel>
                 <OutlinedInput {...field} label="Last name" />
-                {errors.firstName ? <FormHelperText>{errors.firstName.message}</FormHelperText> : null}
+                {errors.lastName ? <FormHelperText>{errors.lastName.message}</FormHelperText> : null}
               </FormControl>
             )}
           />

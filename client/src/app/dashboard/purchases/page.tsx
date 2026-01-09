@@ -10,7 +10,7 @@ import dayjs from 'dayjs';
 
 import { config } from '@/config';
 
-export const metadata = { title: `Products | Dashboard | ${config.site.name}` } satisfies Metadata;
+export const metadata = { title: `Purchases Transaction | Dashboard | ${config.site.name}` } satisfies Metadata;
 
 
 

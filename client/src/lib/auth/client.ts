@@ -2,19 +2,8 @@
 
 import type { User } from '@/types/user';
 
-function generateToken(): string {
-  const arr = new Uint8Array(12);
-  globalThis.crypto.getRandomValues(arr);
-  return Array.from(arr, (v) => v.toString(16).padStart(2, '0')).join('');
-}
-
-const user = {
-  id: 'USR-000',
-  avatar: '/assets/avatar.png',
-  firstName: 'Admin',
-  lastName: 'Maharjan',
-  email: 'admin@gmail.com',
-} satisfies User;
+// Define your API base URL (update this to your server's address)
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
 
 export interface SignUpParams {
   firstName: string;
@@ -23,74 +12,100 @@ export interface SignUpParams {
   password: string;
 }
 
-export interface SignInWithOAuthParams {
-  provider: 'google' | 'discord';
-}
-
 export interface SignInWithPasswordParams {
   email: string;
   password: string;
 }
 
-export interface ResetPasswordParams {
-  email: string;
-}
-
 class AuthClient {
-  async signUp(_: SignUpParams): Promise<{ error?: string }> {
-    // Make API request
+  /**
+   * Register a new user in the Node.js backend
+   * Backend should handle password hashing and MySQL storage [cite: 161, 165, 179]
+   */
+  async signUp(params: SignUpParams): Promise<{ error?: string }> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/auth/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(params),
+      });
 
-    // We do not handle the API, so we'll just generate a token and store it in localStorage.
-    const token = generateToken();
-    localStorage.setItem('custom-auth-token', token);
+      const result = await response.json();
 
-    return {};
-  }
+      if (!response.ok) {
+        return { error: result.message || 'Registration failed' };
+      }
 
-  async signInWithOAuth(_: SignInWithOAuthParams): Promise<{ error?: string }> {
-    return { error: 'Social authentication not implemented' };
-  }
-
-  async signInWithPassword(params: SignInWithPasswordParams): Promise<{ error?: string }> {
-    const { email, password } = params;
-
-    // Make API request
-
-    // We do not handle the API, so we'll check if the credentials match with the hardcoded ones.
-    if (email !== 'admin@gmail.com' || password !== 'admin@123') {
-      return { error: 'Invalid credentials' };
+      // Store the JWT returned by the backend [cite: 165]
+      localStorage.setItem('custom-auth-token', result.token);
+      return {};
+    } catch (err) {
+      return { error: 'Connection error. Is the Node.js server running?' };
     }
-
-    const token = generateToken();
-    localStorage.setItem('custom-auth-token', token);
-
-    return {};
   }
 
-  async resetPassword(_: ResetPasswordParams): Promise<{ error?: string }> {
-    return { error: 'Password reset not implemented' };
+  /**
+   * Authenticate user and receive a JWT
+   * Matches email and password hash in the database [cite: 184, 199]
+   */
+  async signInWithPassword(params: SignInWithPasswordParams): Promise<{ error?: string }> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(params),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        return { error: result.message || 'Invalid credentials' };
+      }
+
+      // Save token to localStorage for persistent session management [cite: 151, 165]
+      localStorage.setItem('custom-auth-token', result.token);
+      return {};
+    } catch (err) {
+      return { error: 'Could not connect to the authentication service.' };
+    }
   }
 
-  async updatePassword(_: ResetPasswordParams): Promise<{ error?: string }> {
-    return { error: 'Update reset not implemented' };
-  }
-
+  /**
+   * Fetch user data using the stored JWT
+   * Supports Role-Based Access Control (RBAC) [cite: 180, 233]
+   */
   async getUser(): Promise<{ data?: User | null; error?: string }> {
-    // Make API request
-
-    // We do not handle the API, so just check if we have a token in localStorage.
     const token = localStorage.getItem('custom-auth-token');
 
     if (!token) {
       return { data: null };
     }
 
-    return { data: user };
+    try {
+      const response = await fetch(`${API_BASE_URL}/auth/me`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        localStorage.removeItem('custom-auth-token');
+        return { data: null, error: 'Session expired' };
+      }
+
+      // Result should match your User type: id, firstName, role, etc. [cite: 273]
+      return { data: result.user };
+    } catch (err) {
+      return { error: 'Failed to fetch user data' };
+    }
   }
 
   async signOut(): Promise<{ error?: string }> {
     localStorage.removeItem('custom-auth-token');
-
     return {};
   }
 }
