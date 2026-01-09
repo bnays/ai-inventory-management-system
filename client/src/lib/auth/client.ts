@@ -108,6 +108,24 @@ class AuthClient {
     localStorage.removeItem('custom-auth-token');
     return {};
   }
+
+  // Add this inside the AuthClient class in client.ts
+    async resetPassword(params: { email: string }): Promise<{ error?: string }> {
+    try {
+        const response = await fetch(`${API_BASE_URL}/auth/reset-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(params),
+        });
+
+        const result = await response.json();
+        if (!response.ok) return { error: result.message || 'Reset failed' };
+
+        return {};
+    } catch (err) {
+        return { error: 'Connection error' };
+    }
+    }
 }
 
 export const authClient = new AuthClient();
