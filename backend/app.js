@@ -3,6 +3,10 @@ const app = express();
 const cors = require('cors');
 require('dotenv').config(); // Ensure your .env variables are loaded
 
+// 1. Import Controllers
+const inventoryController = require('./controllers/inventoryController');
+const userController = require('./controllers/userController');
+
 // Use process.env.PORT for the server port (typically 5000)
 const port = process.env.PORT || 5000;
 
@@ -33,10 +37,38 @@ app.get('/api/protected', protect(['admin', 'user']), (req, res) => {
     res.json({ message: "This is a protected route", user: req.user });
 });
 
-// // Root route for connectivity check
-// app.get('/', (req, res) => {
-//     res.send('Logix Warehousing API is running!');
-// });
+// --- Inventory Routes ---
+
+// Staff and Admins can view the stock list
+app.get('/api/inventory',
+    protect(['admin', 'user']),
+    inventoryController.getAllInventory
+);
+
+// Only Admins can create new product records
+app.post('/api/inventory',
+    protect(['admin']),
+    inventoryController.createProduct
+);
+
+// Staff and Admins can update stock levels (e.g., after a sale or shipment)
+app.patch('/api/inventory/:id',
+    protect(['admin', 'user']),
+    inventoryController.updateStock
+);
+
+// Only Admins can delete products from the system
+app.delete('/api/inventory/:id',
+    protect(['admin']),
+    inventoryController.deleteProduct
+);
+
+// --- User Management Routes ---
+// Only Admins can delete see all the users list
+app.get('/api/users',
+    protect(['admin']),
+    userController.getAllUsers
+);
 
 app.listen(port, () => {
     console.log(`Logix Backend listening on port ${port}`);
