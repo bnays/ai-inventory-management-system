@@ -29,7 +29,7 @@ const schema = zod.object({
 
 type Values = zod.infer<typeof schema>;
 
-const defaultValues = { email: 'admin@gmail.com', password: 'admin@123' } satisfies Values;
+const defaultValues = { email: '', password: '' } satisfies Values;
 
 export function SignInForm(): React.JSX.Element {
   const router = useRouter();
@@ -49,25 +49,27 @@ export function SignInForm(): React.JSX.Element {
 
   const onSubmit = React.useCallback(
     async (values: Values): Promise<void> => {
-      setIsPending(true);
+        setIsPending(true);
 
-      const { error } = await authClient.signInWithPassword(values);
+        const { error } = await authClient.signInWithPassword(values);
 
-      if (error) {
+        if (error) {
         setError('root', { type: 'server', message: error });
         setIsPending(false);
         return;
-      }
+        }
 
-      // Refresh the auth state
-      await checkSession?.();
+        // 1. Force the UserProvider to fetch the user profile from /api/auth/me
+        await checkSession?.();
 
-      // UserProvider, for this case, will not refresh the router
-      // After refresh, GuestGuard will handle the redirect
-      router.refresh();
+        // 2. Explicitly push to the dashboard after the session is verified
+        router.push(paths.dashboard.overview);
+        
+        // 3. Optional: refresh ensures the UI (sidebar/header) reflects the new role
+        router.refresh();
     },
     [checkSession, router, setError]
-  );
+    );
 
   return (
     <Stack spacing={4}>
