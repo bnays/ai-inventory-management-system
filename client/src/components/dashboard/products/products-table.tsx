@@ -1,3 +1,4 @@
+// src/components/dashboard/products/products-table.tsx
 'use client';
 
 import * as React from 'react';
@@ -15,16 +16,28 @@ import {
   TablePagination,
   TableRow,
   Typography,
+  IconButton,
+  Tooltip,
 } from '@mui/material';
+import { Pencil as PencilIcon } from '@phosphor-icons/react/dist/ssr/Pencil';
+import { Trash as TrashIcon } from '@phosphor-icons/react/dist/ssr/Trash';
 
 export interface Product {
-  product_id: string;
+  product_id: string; // Matches your MySQL primary key
   product_name: string;
   sku: string;
-  category: string;
+  category?: string;
+  category_id: number;
   unit_price: number;
   quantity_on_hand: number;
   reorder_level: number;
+  created_at?: string;
+  supplier_names?: string | null;
+  suppliers?: {
+    supplier_id: number;
+    supply_price: number;
+    lead_time_days?: number;
+  }[];
 }
 
 interface ProductsTableProps {
@@ -32,9 +45,10 @@ interface ProductsTableProps {
   page?: number;
   rows?: Product[];
   rowsPerPage?: number;
-  // ADD THESE TWO PROPS TO FIX THE ERROR
   onPageChange: (event: unknown, newPage: number) => void;
   onRowsPerPageChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
+  onEdit: (product: Product) => void; // Trigger for edit modal
+  onDelete: (product: Product) => void; // Trigger for delete dialog
 }
 
 export function ProductsTable({
@@ -44,11 +58,13 @@ export function ProductsTable({
   rowsPerPage = 10,
   onPageChange,
   onRowsPerPageChange,
+  onEdit,
+  onDelete,
 }: ProductsTableProps): React.JSX.Element {
   return (
     <Card>
       <Box sx={{ overflowX: 'auto' }}>
-        <Table sx={{ minWidth: '800px' }}>
+        <Table sx={{ minWidth: '1000px' }}>
           <TableHead>
             <TableRow>
               <TableCell padding="checkbox">
@@ -60,11 +76,13 @@ export function ProductsTable({
               <TableCell>Price</TableCell>
               <TableCell>Stock Level</TableCell>
               <TableCell>Status</TableCell>
+              <TableCell align="right">Actions</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {rows.map((row) => {
-              const isLowStock = row.quantity_on_hand <= row.reorder_level;
+              // Inventory logic for low stock warnings
+              const isLowStock = Number(row.quantity_on_hand) <= Number(row.reorder_level);
               
               return (
                 <TableRow hover key={row.product_id}>
@@ -75,8 +93,11 @@ export function ProductsTable({
                     <Typography variant="subtitle2">{row.product_name}</Typography>
                   </TableCell>
                   <TableCell>{row.sku}</TableCell>
-                  <TableCell>{row.category}</TableCell>
-                  <TableCell>${Number(row.unit_price).toFixed(2)}</TableCell>
+                  <TableCell>{row.category || 'Uncategorized'}</TableCell>
+                  <TableCell>
+                    {/* Currency formatting for Sydney market */}
+                    {new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD' }).format(row.unit_price)}
+                  </TableCell>
                   <TableCell>{row.quantity_on_hand}</TableCell>
                   <TableCell>
                     <Chip
@@ -85,12 +106,31 @@ export function ProductsTable({
                       size="small"
                     />
                   </TableCell>
+                  <TableCell align="right">
+                    <Stack direction="row" spacing={1} justifyContent="flex-end">
+                      <Tooltip title="Edit Product">
+                        <IconButton onClick={() => onEdit(row)} size="small">
+                          <PencilIcon size={20} />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="Delete Product">
+                        <IconButton 
+                          onClick={() => onDelete(row)} 
+                          color="error" 
+                          size="small"
+                        >
+                          <TrashIcon size={20} />
+                        </IconButton>
+                      </Tooltip>
+                    </Stack>
+                  </TableCell>
                 </TableRow>
               );
             })}
+            
             {rows.length === 0 && (
               <TableRow>
-                <TableCell colSpan={7} align="center" sx={{ py: 3 }}>
+                <TableCell colSpan={8} align="center" sx={{ py: 3 }}>
                   No products found in the warehouse.
                 </TableCell>
               </TableRow>
@@ -99,7 +139,6 @@ export function ProductsTable({
         </Table>
       </Box>
       <Divider />
-      {/* CONNECT TO THE PROPS FROM CONTEXT */}
       <TablePagination
         component="div"
         count={count}

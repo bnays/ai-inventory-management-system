@@ -16,9 +16,10 @@ export default function Page(): React.JSX.Element {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         const data = await response.json();
-        setUsers(data);
+        setUsers(data || []);
       } catch (err) {
         console.error("Failed to load users", err);
+        setUsers([]); // Fallback to empty array on error
       } finally {
         setLoading(false);
       }

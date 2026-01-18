@@ -14,6 +14,9 @@ export interface User {
 }
 
 export function UsersTable({ rows = [] }: { rows: User[] }): React.JSX.Element {
+
+    const safeRows = Array.isArray(rows) ? rows : [];
+    
   return (
     <Card>
       <Box sx={{ overflowX: 'auto' }}>
@@ -28,7 +31,7 @@ export function UsersTable({ rows = [] }: { rows: User[] }): React.JSX.Element {
             </TableRow>
           </TableHead>
           <TableBody>
-            {rows.map((user) => (
+            {safeRows.map((user) => (
               <TableRow hover key={user.user_id}>
                 <TableCell>
                   <Typography variant="subtitle2">
@@ -56,6 +59,15 @@ export function UsersTable({ rows = [] }: { rows: User[] }): React.JSX.Element {
                 </TableCell>
               </TableRow>
             ))}
+            {safeRows.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={5} align="center">
+                  <Typography variant="body2" sx={{ py: 2 }}>
+                    No users found.
+                  </Typography>
+                </TableCell>
+              </TableRow>
+            )}
           </TableBody>
         </Table>
       </Box>

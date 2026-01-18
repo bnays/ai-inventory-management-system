@@ -1,71 +1,105 @@
+// src/app/dashboard/products/page.tsx
 'use client';
 
 import * as React from 'react';
 import { Button, Stack, Typography } from '@mui/material';
-import { DownloadIcon } from '@phosphor-icons/react/dist/ssr/Download';
-import { PlusIcon } from '@phosphor-icons/react/dist/ssr/Plus';
-import { UploadIcon } from '@phosphor-icons/react/dist/ssr/Upload';
-
+import { Plus as PlusIcon } from '@phosphor-icons/react/dist/ssr/Plus';
+import { ProductsTable, type Product } from '@/components/dashboard/products/products-table';
 import { useInventory } from '@/hooks/use-inventory';
-import { ProductsTable } from '@/components/dashboard/products/products-table';
+import { AddProductModal } from '@/components/dashboard/products/add-product-modal';
+import { DeleteConfirmationDialog } from '@/components/dashboard/layout/delete-confimation-dialog';
+import { EditProductModal } from '@/components/dashboard/products/edit-product-modal';
+import { useCategories } from '@/contexts/category-context';
+import { useSuppliers } from '@/contexts/supplier-context';
 
 export default function Page(): React.JSX.Element {
-  // Pull everything from your new Inventory Context
   const { 
-    products, 
-    isLoading, 
-    totalCount, 
-    page, 
-    rowsPerPage, 
-    setPage, 
-    setRowsPerPage 
+    products, isLoading, totalCount, page, rowsPerPage, 
+    setPage, setRowsPerPage, refreshInventory, deleteProduct 
   } = useInventory();
+
+    const { refreshCategories } = useCategories();
+    const { refreshSuppliers } = useSuppliers();
+
+  const [isAddOpen, setIsAddOpen] = React.useState(false);
+  const [isDeleteOpen, setIsDeleteOpen] = React.useState(false);
+  const [selectedProduct, setSelectedProduct] = React.useState<Product | null>(null);
+  const [isDeleting, setIsDeleting] = React.useState(false);
+
+  // Inside Page component state
+const [isEditOpen, setIsEditOpen] = React.useState(false);
+
+  React.useEffect(() => {
+    refreshInventory().catch(console.error);
+    refreshCategories().catch(console.error);
+    const loadData = async () => {
+      try {
+        await Promise.all([
+          refreshInventory(),
+          refreshSuppliers(),
+          refreshCategories(),
+        ]);
+      } catch (err) {
+        console.error("Failed to load catalog data", err);
+      }
+    };
+    
+    loadData();
+  }, [refreshInventory, refreshCategories, refreshSuppliers]);
+
+  const handleDeleteConfirm = async () => {
+    if (!selectedProduct) return;
+    setIsDeleting(true);
+    try {
+      // Uses your backend transaction-safe logic
+      await deleteProduct(selectedProduct.product_id); 
+      setIsDeleteOpen(false);
+    } catch (err: any) {
+      alert(err.message || "Failed to delete product. Transaction rolled back.");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   return (
     <Stack spacing={3}>
-      {/* Header Section */}
-      <Stack direction="row" spacing={3}>
-        <Stack spacing={1} sx={{ flex: '1 1 auto' }}>
-          <Typography variant="h4">Inventory Management</Typography>
-          <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-            <Button color="inherit" startIcon={<UploadIcon fontSize="var(--icon-fontSize-md)" />}>
-              Import
-            </Button>
-            <Button color="inherit" startIcon={<DownloadIcon fontSize="var(--icon-fontSize-md)" />}>
-              Export
-            </Button>
-          </Stack>
-        </Stack>
-        <div>
-          <Button 
-            startIcon={<PlusIcon fontSize="var(--icon-fontSize-md)" />} 
-            variant="contained"
-          >
-            Add Product
-          </Button>
-        </div>
+      <Stack direction="row" spacing={3} sx={{ justifyContent: 'space-between' }}>
+        <Typography variant="h4">Product Catalog</Typography>
+        <Button startIcon={<PlusIcon />} variant="contained" onClick={() => setIsAddOpen(true)}>
+          Add Product
+        </Button>
       </Stack>
 
-      {/* Main Table Section */}
-      {isLoading ? (
-        <Typography variant="body1" sx={{ textAlign: 'center', py: 5 }}>
-          Loading your warehouse data...
-        </Typography>
-      ) : (
-        <ProductsTable
-          count={totalCount}
-          page={page}
-          rows={products}
-          rowsPerPage={rowsPerPage}
-          // Connect the table actions to context state setters
-          onPageChange={(event: unknown, newPage: number) => {
-            setPage(newPage);
-          }}
-          onRowsPerPageChange={(event: React.ChangeEvent<HTMLInputElement>) => {
-            setRowsPerPage(parseInt(event.target.value, 10));
-          }}
+      <ProductsTable
+        count={totalCount}
+        page={page}
+        rows={products}
+        rowsPerPage={rowsPerPage}
+        onPageChange={(_, newPage) => setPage(newPage)}
+        onRowsPerPageChange={(e) => setRowsPerPage(parseInt(e.target.value, 10))}
+        onEdit={(prod) => { setSelectedProduct(prod); setIsEditOpen(true); }}
+        onDelete={(prod) => { setSelectedProduct(prod); setIsDeleteOpen(true); }}
+      />
+
+      <AddProductModal open={isAddOpen} onClose={() => setIsAddOpen(false)} />
+
+        <EditProductModal
+        open={isEditOpen} 
+        product={selectedProduct} 
+        onClose={() => {
+            setIsEditOpen(false);
+            setSelectedProduct(null);
+        }} 
         />
-      )}
+
+      <DeleteConfirmationDialog
+        open={isDeleteOpen}
+        onClose={() => setIsDeleteOpen(false)}
+        onConfirm={handleDeleteConfirm}
+        title="Delete Product?"
+        content={`Danger: This permanently deletes "${selectedProduct?.product_name}" and its inventory records.`}
+        isLoading={isDeleting}
+      />
     </Stack>
   );
 }

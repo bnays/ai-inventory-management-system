@@ -16,11 +16,36 @@ import { usePopover } from '@/hooks/use-popover';
 
 import { MobileNav } from './mobile-nav';
 import { UserPopover } from './user-popover';
+import { useUser } from '@/hooks/use-user';
+import { userInitials } from '@/lib/utils';
 
 export function MainNav(): React.JSX.Element {
   const [openNav, setOpenNav] = React.useState<boolean>(false);
 
   const userPopover = usePopover<HTMLDivElement>();
+
+  const { user } = useUser();
+
+  const getUserAvatar = (user: any) => {
+    if (user?.img) {
+      return <Avatar
+              onClick={userPopover.handleOpen}
+              ref={userPopover.anchorRef}
+              src="/assets/avatar.png"
+              sx={{ cursor: 'pointer' }}
+            />
+    }
+    else {
+        return <Avatar 
+                src={user?.avatar} 
+                onClick={userPopover.handleOpen}
+                ref={userPopover.anchorRef}
+                sx={{ cursor: 'pointer' }}
+                >
+                {userInitials(user)}
+            </Avatar>
+    }
+  }
 
   return (
     <React.Fragment>
@@ -67,12 +92,7 @@ export function MainNav(): React.JSX.Element {
                 </IconButton>
               </Badge>
             </Tooltip>
-            <Avatar
-              onClick={userPopover.handleOpen}
-              ref={userPopover.anchorRef}
-              src="/assets/avatar.png"
-              sx={{ cursor: 'pointer' }}
-            />
+            {getUserAvatar(user)}
           </Stack>
         </Stack>
       </Box>
