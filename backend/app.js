@@ -6,6 +6,10 @@ require('dotenv').config(); // Ensure your .env variables are loaded
 // 1. Import Controllers
 const inventoryController = require('./controllers/inventoryController');
 const userController = require('./controllers/userController');
+const categoryController = require('./controllers/categoryController');
+const supplierController = require('./controllers/supplierController');
+const purchaseController = require('./controllers/purchaseController');
+const saleController = require('./controllers/saleController');
 
 // Use process.env.PORT for the server port (typically 5000)
 const port = process.env.PORT || 5000;
@@ -46,7 +50,7 @@ app.get('/api/inventory',
 );
 
 // Only Admins can create new product records
-app.post('/api/inventory',
+app.post('/api/products',
     protect(['admin']),
     inventoryController.createProduct
 );
@@ -57,11 +61,52 @@ app.patch('/api/inventory/:id',
     inventoryController.updateStock
 );
 
+app.patch('/api/products/:id',
+    protect(['admin']),
+    inventoryController.updateProduct // Ensure this function exists in your controller!
+);
+
 // Only Admins can delete products from the system
 app.delete('/api/inventory/:id',
     protect(['admin']),
     inventoryController.deleteProduct
 );
+
+// --- Category Routes ---
+
+// All logged-in users can view categories; only admins can create them
+app.get('/api/categories', protect(['admin', 'user']), categoryController.getAllCategories);
+app.post('/api/categories', protect(['admin']), categoryController.createCategory);
+app.patch('/api/categories/:id', protect(['admin']), categoryController.updateCategory);
+app.delete('/api/categories/:id', protect(['admin']), categoryController.deleteCategory);
+
+// All logged-in users can view suppliers; only admins can create them
+app.get('/api/suppliers', protect(['admin', 'user']), supplierController.getAllSuppliers);
+app.post('/api/suppliers', protect(['admin']), supplierController.createSupplier);
+app.patch('/api/suppliers/:id', protect(['admin']), supplierController.updateSupplier);
+
+// --- Purchase Module Routes ---
+// Record a new bulk order from a supplier
+app.post('/api/purchases', protect(['admin']), purchaseController.createPurchaseOrder);
+
+// Fetch all orders for the dashboard table
+app.get('/api/purchases', protect(['admin', 'user']), purchaseController.getAllPurchases);
+
+// Fetch specific details for the Order Modal
+app.get('/api/purchases/:id', protect(['admin', 'user']), purchaseController.getPurchaseById);
+
+// The critical 'Receive' button that increments inventory
+app.patch('/api/purchases/:id/receive', protect(['admin', 'user']), purchaseController.receivePurchaseOrder);
+
+// --- Sales Module Routes ---
+// Process a customer sale and deduct inventory automatically
+app.post('/api/sales', protect(['admin', 'user']), saleController.createSaleOrder);
+
+// Fetch history for the Sales report
+app.get('/api/sales', protect(['admin', 'user']), saleController.getAllSales);
+
+// View specific items sold in a transaction
+app.get('/api/sales/:id', protect(['admin', 'user']), saleController.getSaleById);
 
 // --- User Management Routes ---
 // Only Admins can delete see all the users list
@@ -69,6 +114,10 @@ app.get('/api/users',
     protect(['admin']),
     userController.getAllUsers
 );
+
+app.patch('/api/users/profile', protect(['admin', 'user']), userController.updateUserProfile);
+
+
 
 app.listen(port, () => {
     console.log(`Logix Backend listening on port ${port}`);

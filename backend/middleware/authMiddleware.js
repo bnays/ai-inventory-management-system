@@ -8,16 +8,22 @@ exports.protect = (roles = []) => {
 
         if (!token) return res.status(401).json({ message: "Access denied: No token" });
 
-        jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
-            if (err) return res.status(403).json({ message: "Invalid or expired token" });
+        try {
+            // 1. Verify the token
+            const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-            // Check Role-Based Access Control (RBAC)
-            if (roles.length && !roles.includes(decoded.role)) {
-                return res.status(403).json({ message: "Insufficient permissions" });
+            // 2. IMPORTANT: Attach the decoded data to the request
+            // This is where req.user.user_id comes from!
+            req.user = decoded;
+
+            // 3. Role-based check
+            if (roles.length && !roles.includes(req.user.role)) {
+                return res.status(403).json({ message: "Forbidden: Access denied" });
             }
 
-            req.user = decoded; // Attach user info to request
             next();
-        });
+        } catch (error) {
+            return res.status(401).json({ message: "Token invalid" });
+        }
     };
 };
