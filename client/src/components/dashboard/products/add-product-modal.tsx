@@ -99,6 +99,7 @@ export function AddProductModal({ open, onClose }: { open: boolean; onClose: () 
                         size="small" 
                         color="primary" 
                         variant="outlined" 
+                        onClick={(e) => {e.preventDefault}}
                         />
                     );
                     })

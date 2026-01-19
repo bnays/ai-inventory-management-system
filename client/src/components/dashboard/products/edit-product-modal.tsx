@@ -114,7 +114,7 @@ export function EditProductModal({ open, onClose, product }: EditProductModalPro
                 value.map((option, index) => {
                   const { key, ...tagProps } = getTagProps({ index });
                   return (
-                    <Chip key={key} label={option.name} {...tagProps} size="small" color="primary" variant="outlined" />
+                    <Chip key={key} label={option.name} {...tagProps} size="small" color="primary" variant="outlined" onClick={(e) => {e.preventDefault}}/>
                   );
                 })
               }

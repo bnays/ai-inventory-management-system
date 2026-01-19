@@ -104,6 +104,7 @@ export function ProductsTable({
                       label={isLowStock ? 'Low Stock' : 'In Stock'}
                       color={isLowStock ? 'error' : 'success'}
                       size="small"
+                      onClick={(e) => {e.preventDefault}}
                     />
                   </TableCell>
                   <TableCell align="right">

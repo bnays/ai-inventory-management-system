@@ -9,6 +9,9 @@ import { LocalizationProvider } from '@/components/core/localization-provider';
 import { ThemeProvider } from '@/components/core/theme-provider/theme-provider';
 import { CategoryProvider } from '@/contexts/category-context';
 import { SupplierProvider } from '@/contexts/supplier-context';
+// Import your new contexts
+import { PurchaseProvider } from '@/contexts/purchase-context';
+import { SaleProvider } from '@/contexts/sale-context';
 
 export const viewport = { width: 'device-width', initialScale: 1 } satisfies Viewport;
 
@@ -23,13 +26,18 @@ export default function Layout({ children }: LayoutProps): React.JSX.Element {
         <LocalizationProvider>
           <UserProvider>
             <CategoryProvider>
-                <SupplierProvider>
+              <SupplierProvider>
+                {/* Purchase and Sale providers sit here to manage stock flow */}
+                <PurchaseProvider>
+                  <SaleProvider>
                     <InventoryProvider>
-                        <ThemeProvider>
+                      <ThemeProvider>
                         {children}
-                        </ThemeProvider>
+                      </ThemeProvider>
                     </InventoryProvider>
-                </SupplierProvider>
+                  </SaleProvider>
+                </PurchaseProvider>
+              </SupplierProvider>
             </CategoryProvider>
           </UserProvider>
         </LocalizationProvider>

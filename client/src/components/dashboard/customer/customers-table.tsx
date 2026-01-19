@@ -45,6 +45,7 @@ export function UsersTable({ rows = [] }: { rows: User[] }): React.JSX.Element {
                     size="small" 
                     color={user.role === 'admin' ? 'primary' : 'default'} 
                     variant="outlined"
+                    onClick={(e) => {e.preventDefault}}
                   />
                 </TableCell>
                 <TableCell>
@@ -52,6 +53,7 @@ export function UsersTable({ rows = [] }: { rows: User[] }): React.JSX.Element {
                     label={user.active ? 'Active' : 'Disabled'} 
                     color={user.active ? 'success' : 'error'} 
                     size="small" 
+                    onClick={(e) => {e.preventDefault}}
                   />
                 </TableCell>
                 <TableCell>
