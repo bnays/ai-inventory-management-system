@@ -10,6 +10,7 @@ const categoryController = require('./controllers/categoryController');
 const supplierController = require('./controllers/supplierController');
 const purchaseController = require('./controllers/purchaseController');
 const saleController = require('./controllers/saleController');
+const customerController = require('./controllers/customerController');
 
 // Use process.env.PORT for the server port (typically 5000)
 const port = process.env.PORT || 5000;
@@ -116,6 +117,29 @@ app.get('/api/users',
 );
 
 app.patch('/api/users/profile', protect(['admin', 'user']), userController.updateUserProfile);
+
+// --- Customer Routes ---
+// Staff and Admins can view the customer list
+app.get('/api/customers',
+    protect(['admin', 'user']),
+    customerController.getAllCustomers
+);
+
+// Only Admins can create or update customer records for the Sydney hub
+app.post('/api/customers',
+    protect(['admin']),
+    customerController.createCustomer
+);
+
+app.get('/api/customers/:id',
+    protect(['admin', 'user']),
+    customerController.getCustomerById
+);
+
+app.patch('/api/customers/:id',
+    protect(['admin']),
+    customerController.updateCustomer
+);
 
 
 

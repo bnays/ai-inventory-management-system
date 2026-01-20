@@ -1,39 +1,44 @@
-// src/controllers/saleController.js
 const db = require('../config/db');
 
 /**
  * CREATE SALE ORDER
- * Handles the header, line items, and atomic inventory deduction
+ * Now includes customer_id and strict inventory validation.
  */
 exports.createSaleOrder = async (req, res) => {
-    const { user_id, items, tax, discount, shipping_cost, payment_method } = req.body;
+    // Note: user_id should ideally come from your auth middleware (req.user.id)
+    const { user_id, customer_id, items, tax, discount, shipping_cost, payment_method } = req.body;
     const connection = await db.getConnection();
 
     try {
         await connection.beginTransaction();
 
-        // 1. Calculate total amount from items
+        // 1. Calculate total and verify stock
         const total_amount = items.reduce((sum, item) => sum + (item.quantity * item.unit_price), 0);
 
         // 2. Insert into sale_orders (Header)
+        // Now includes customer_id for full traceability
         const orderSql = `
-            INSERT INTO sale_orders (user_id, total_amount, tax, discount, shipping_cost, status, payment_method) 
-            VALUES (?, ?, ?, ?, ?, 'Completed', ?)
+            INSERT INTO sale_orders (user_id, customer_id, total_amount, tax, discount, shipping_cost, status, payment_method) 
+            VALUES (?, ?, ?, ?, ?, ?, 'Completed', ?)
         `;
         const [orderResult] = await connection.execute(orderSql, [
-            user_id, total_amount, tax || 0, discount || 0, shipping_cost || 0, payment_method || 'Cash'
+            user_id || 1, // Fallback to 1 for testing if user_id isn't in body
+            customer_id,
+            total_amount,
+            tax || 0,
+            discount || 0,
+            shipping_cost || 0,
+            payment_method || 'Cash'
         ]);
         const orderId = orderResult.insertId;
 
         // 3. Process each item: Add to order_items and Deduct from inventory
         for (const item of items) {
-            // Insert line item
             await connection.execute(
                 'INSERT INTO sale_order_items (order_id, product_id, quantity, unit_price) VALUES (?, ?, ?, ?)',
                 [orderId, item.product_id, item.quantity, item.unit_price]
             );
 
-            // Deduct from inventory only if enough stock exists
             const [updateResult] = await connection.execute(
                 'UPDATE inventory SET quantity_on_hand = quantity_on_hand - ? WHERE product_id = ? AND quantity_on_hand >= ?',
                 [item.quantity, item.product_id, item.quantity]
@@ -49,8 +54,7 @@ exports.createSaleOrder = async (req, res) => {
 
     } catch (error) {
         await connection.rollback();
-        console.error("Sale Transaction Error:", error.message);
-        res.status(500).json({ message: "Failed to process sale", error: error.message });
+        res.status(400).json({ message: "Transaction failed", error: error.message });
     } finally {
         connection.release();
     }
@@ -58,43 +62,50 @@ exports.createSaleOrder = async (req, res) => {
 
 /**
  * GET ALL SALES
- * Fetches transaction history with pagination for the dashboard
+ * Joins both users (staff) and customers for the main table
  */
 exports.getAllSales = async (req, res) => {
     try {
-        const page = parseInt(req.query.page) || 1;
-        const limit = parseInt(req.query.limit) || 10;
-        const offset = (page - 1) * limit;
-
-        const [countResult] = await db.execute('SELECT COUNT(*) as total FROM sale_orders');
-        const totalItems = countResult[0].total;
-
         const query = `
-            SELECT so.*, u.username 
+            SELECT 
+                so.*, 
+                c.name AS customer_name,
+                CONCAT(u.first_name, ' ', u.last_name) AS processed_by
             FROM sale_orders so
+            LEFT JOIN customers c ON so.customer_id = c.customer_id
             LEFT JOIN users u ON so.user_id = u.user_id
             ORDER BY so.created_at DESC
-            LIMIT ? OFFSET ?
+            LIMIT 20 OFFSET 0;
         `;
-        const [rows] = await db.execute(query, [limit, offset]);
-
-        res.status(200).json({
-            data: rows,
-            meta: { totalItems, totalPages: Math.ceil(totalItems / limit), currentPage: page }
-        });
+        const [rows] = await db.execute(query);
+        res.status(200).json(rows);
     } catch (error) {
-        res.status(500).json({ message: "Error fetching sales history", error: error.message });
+        res.status(500).json({ message: "Error fetching sales", error: error.message });
     }
 };
 
 /**
  * GET SALE BY ID
- * Provides detailed breakdown of items within a specific sale
+ * Provides full breakdown including customer address for the printable invoice
  */
 exports.getSaleById = async (req, res) => {
     const { id } = req.params;
     try {
-        const [header] = await db.execute('SELECT * FROM sale_orders WHERE id = ?', [id]);
+        const headerQuery = `
+            SELECT 
+                so.*, 
+                c.name AS customer_name, 
+                c.address AS customer_address, 
+                c.phone AS customer_phone,
+                CONCAT(u.first_name, ' ', u.last_name) AS processed_by,
+                u.role AS processed_by_role
+            FROM sale_orders so
+            LEFT JOIN customers c ON so.customer_id = c.customer_id
+            LEFT JOIN users u ON so.user_id = u.user_id
+            WHERE so.id = ?
+        `;
+        const [header] = await db.execute(headerQuery, [id]);
+
         if (header.length === 0) return res.status(404).json({ message: "Sale not found" });
 
         const [items] = await db.execute(`
@@ -106,6 +117,6 @@ exports.getSaleById = async (req, res) => {
 
         res.status(200).json({ ...header[0], items });
     } catch (error) {
-        res.status(500).json({ message: "Error fetching sale details", error: error.message });
+        res.status(500).json({ message: "Error fetching details", error: error.message });
     }
 };
