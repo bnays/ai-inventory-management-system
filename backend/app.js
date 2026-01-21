@@ -14,6 +14,7 @@ const customerController = require('./controllers/customerController');
 const dashboardController = require('./controllers/dashboardController');
 const notificationController = require('./controllers/notificationController');
 // Use process.env.PORT for the server port (typically 5000)
+const csvtodbController = require('./controllers/csvtodbController');// Use process.env.PORT for the server port (typically 5000)
 const port = process.env.PORT || 5000;
 
 // --- Middleware ---
@@ -180,6 +181,13 @@ app.get('/api/notifications', protect(['admin', 'user']), notificationController
 app.patch('/api/notifications/:id/read', protect(['admin', 'user']), notificationController.markAsRead);
 
 
+
+// csv to db
+app.post(
+    '/api/csvtodb/products',
+    protect(['admin']),
+    csvtodbController.importProducts
+);
 
 app.listen(port, () => {
     console.log(`Logix Backend listening on port ${port}`);
