@@ -32,7 +32,7 @@ export function UserProvider({ children }: UserProviderProps): React.JSX.Element
 
       if (error) {
         logger.error(error);
-        setState((prev) => ({ ...prev, user: null, error: 'Something went wrong', isLoading: false }));
+        setState((prev) => ({ ...prev, user: null, error: 'We are having trouble connecting to the Logix Warehouse backend. Please ensure your Node.js server is running on port 3001.', isLoading: false }));
         return;
       }
 

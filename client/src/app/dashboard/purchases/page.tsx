@@ -1,33 +1,52 @@
-import * as React from 'react';
-import type { Metadata } from 'next';
-import Button from '@mui/material/Button';
-import Stack from '@mui/material/Stack';
-import Typography from '@mui/material/Typography';
-import { DownloadIcon } from '@phosphor-icons/react/dist/ssr/Download';
+"use client";
+
+import React, { useEffect, useState } from 'react';
+import { Button, Stack, Typography } from '@mui/material';
+import { usePurchases } from '@/contexts/purchase-context';
+import { useNotification } from '@/lib/notification';
+import { GlobalSnackbar } from '@/components/core/global-snackbar';
+import { PurchasesTable } from '@/components/dashboard/purchases/purchases-table';
 import { PlusIcon } from '@phosphor-icons/react/dist/ssr/Plus';
-import { UploadIcon } from '@phosphor-icons/react/dist/ssr/Upload';
-import dayjs from 'dayjs';
+import { useRouter } from 'next/navigation';
 
-import { config } from '@/config';
+export default function PurchasesPage() {
+    const router = useRouter();
+    const { purchases, loading, fetchPurchases, receiveOrder } = usePurchases();
+    const { notification, showNotification, hideNotification } = useNotification();
+    const [mounted, setMounted] = useState(false);
 
-export const metadata = { title: `Purchases Transaction | Dashboard | ${config.site.name}` } satisfies Metadata;
+    useEffect(() => {
+        setMounted(true);
+        fetchPurchases();
+    }, [fetchPurchases]);
 
+    if (!mounted) return null;
 
+    const handleReceive = async (id: number) => {
+        try {
+            await receiveOrder(id);
+            showNotification("Order received and inventory updated!", "success");
+        } catch (error: any) {
+            showNotification(error.message || "Failed to receive order", "error");
+        }
+    };
 
-export default function Page(): React.JSX.Element {
+    return (
+        <Stack spacing={3}>
+            <Stack direction="row" spacing={3} sx={{ justifyContent: 'space-between' }}>
+                <Typography variant="h4" fontWeight="bold">Purchase Order</Typography>
+                <Button startIcon={<PlusIcon />} variant="contained" onClick={() => router.push('/dashboard/purchases/new')}>
+                Create New Purchase Order
+                </Button>
+            </Stack>
+            
+            <PurchasesTable 
+                purchases={purchases} 
+                loading={loading} 
+                onReceive={handleReceive} 
+            />
 
-  return (
-    <Stack spacing={3}>
-      <Stack direction="row" spacing={3}>
-        <Stack spacing={1} sx={{ flex: '1 1 auto' }}>
-          <Typography variant="h4">Purchases Transaction</Typography>
+            <GlobalSnackbar state={notification} onClose={hideNotification} />
         </Stack>
-        <div>
-          <Button startIcon={<PlusIcon fontSize="var(--icon-fontSize-md)" />} variant="contained">
-            Add
-          </Button>
-        </div>
-      </Stack>
-    </Stack>
-  );
+    );
 }

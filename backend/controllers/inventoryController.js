@@ -18,12 +18,25 @@ exports.getAllInventory = async (req, res) => {
 
         // 3. Fetch the specific slice of data
         const query = `
-            SELECT p.product_id, p.product_name, p.sku, c.name as category, 
-                   p.unit_price, i.quantity_on_hand, p.reorder_level
+            SELECT 
+                p.product_id, 
+                p.product_name, 
+                p.sku, 
+                c.name as category, 
+                p.category_id, 
+                p.unit_price, 
+                i.quantity_on_hand, 
+                p.reorder_level,
+                -- Use s.name to avoid the 'ambiguous column' error
+                GROUP_CONCAT(s.name SEPARATOR ', ') AS supplier_names
             FROM products p
             LEFT JOIN inventory i ON p.product_id = i.product_id
             LEFT JOIN categories c ON p.category_id = c.id
-            ORDER BY p.created_at DESC
+            LEFT JOIN product_suppliers ps ON p.product_id = ps.product_id
+            LEFT JOIN suppliers s ON ps.supplier_id = s.id
+            -- Required: list all non-aggregated columns here
+            GROUP BY p.product_id, c.name, i.quantity_on_hand
+            ORDER BY p.product_id DESC 
             LIMIT ? OFFSET ?
         `;
 
@@ -47,9 +60,16 @@ exports.getAllInventory = async (req, res) => {
  * Uses a Transaction to ensure data integrity across two tables
  */
 exports.createProduct = async (req, res) => {
-    const { product_name, sku, category_id, unit_price, reorder_level, initial_stock } = req.body;
+    const {
+        product_name,
+        sku,
+        category_id,
+        unit_price,
+        reorder_level,
+        initial_stock,
+        suppliers // Array of { supplier_id, supply_price, lead_time_days }
+    } = req.body;
 
-    // Get a connection from the pool to handle the transaction
     const connection = await db.getConnection();
 
     try {
@@ -61,43 +81,49 @@ exports.createProduct = async (req, res) => {
             VALUES (?, ?, ?, ?, ?)
         `;
         const [productResult] = await connection.execute(productSql, [
-            product_name,
-            sku,
-            category_id,
-            unit_price,
-            reorder_level
+            product_name, sku, category_id, unit_price, reorder_level
         ]);
 
         const newProductId = productResult.insertId;
 
         // 2. Initialize dynamic inventory levels
-        const inventorySql = `
-            INSERT INTO inventory (product_id, quantity_on_hand) 
-            VALUES (?, ?)
-        `;
+        const inventorySql = `INSERT INTO inventory (product_id, quantity_on_hand) VALUES (?, ?)`;
         await connection.execute(inventorySql, [newProductId, initial_stock || 0]);
 
-        // Commit both inserts
+        // 3. Link multiple suppliers in the junction table
+        if (suppliers && suppliers.length > 0) {
+            const supplierSql = `
+                INSERT INTO product_suppliers (product_id, supplier_id, supply_price, lead_time_days) 
+                VALUES (?, ?, ?, ?)
+            `;
+
+            // Map each supplier link to a promise
+            const supplierPromises = suppliers.map(sup =>
+                connection.execute(supplierSql, [
+                    newProductId,
+                    sup.supplier_id,
+                    sup.supply_price || unit_price, // Fallback to unit_price if specific price isn't provided
+                    sup.lead_time_days || 7
+                ])
+            );
+
+            await Promise.all(supplierPromises);
+        }
+
         await connection.commit();
 
         res.status(201).json({
-            message: "Product created and inventory initialized successfully",
+            message: "Product created, inventory initialized, and suppliers linked successfully",
             productId: newProductId
         });
 
     } catch (error) {
-        // Undo changes if any step fails
-        await connection.rollback();
-        res.status(500).json({
-            message: "Failed to create product",
-            error: error.message
-        });
+        await connection.rollback(); // Undo everything if any part fails
+        res.status(500).json({ message: "Failed to create product", error: error.message });
     } finally {
-        // Release connection back to the pool
         connection.release();
     }
 };
-
 /**
  * UPDATE STOCK LEVEL (Adjustment)
  * Used when shipments arrive or manual corrections are needed
@@ -123,10 +149,66 @@ exports.updateStock = async (req, res) => {
     }
 };
 
-/**
- * DELETE PRODUCT
- * Removes inventory record first due to Foreign Key constraints
- */
+
+// backend/controllers/productController.js
+// src/controllers/inventoryController.js
+
+exports.updateProduct = async (req, res) => {
+    const { id } = req.params;
+    const {
+        product_name,
+        sku,
+        category_id,
+        unit_price,
+        reorder_level,
+        suppliers // Array of { supplier_id, supply_price }
+    } = req.body;
+
+    const connection = await db.getConnection();
+
+    try {
+        await connection.beginTransaction();
+
+        // 1. Update core product details
+        const productSql = `
+            UPDATE products 
+            SET product_name = ?, sku = ?, category_id = ?, unit_price = ?, reorder_level = ? 
+            WHERE product_id = ?
+        `;
+        await connection.execute(productSql, [
+            product_name, sku, category_id, unit_price, reorder_level, id
+        ]);
+
+        // 2. Synchronize Many-to-Many Supplier Links
+        if (suppliers) {
+            // First, remove existing links for this product
+            await connection.execute('DELETE FROM product_suppliers WHERE product_id = ?', [id]);
+
+            // Then, insert the new set of links
+            if (suppliers.length > 0) {
+                const supplierSql = `
+                    INSERT INTO product_suppliers (product_id, supplier_id, supply_price) 
+                    VALUES (?, ?, ?)
+                `;
+                const supplierPromises = suppliers.map(sup =>
+                    connection.execute(supplierSql, [id, sup.supplier_id, sup.supply_price])
+                );
+                await Promise.all(supplierPromises);
+            }
+        }
+
+        await connection.commit();
+        res.status(200).json({ message: "Product and supplier links updated successfully" });
+
+    } catch (error) {
+        await connection.rollback(); // Undo everything if any step fails
+        console.error("Update Error:", error.message);
+        res.status(500).json({ message: "Error updating product", error: error.message });
+    } finally {
+        connection.release();
+    }
+};
+
 exports.deleteProduct = async (req, res) => {
     const { id } = req.params;
     const connection = await db.getConnection();
@@ -147,5 +229,101 @@ exports.deleteProduct = async (req, res) => {
         res.status(500).json({ message: "Error deleting product", error: error.message });
     } finally {
         connection.release();
+    }
+};
+
+/**
+ * GET LOW STOCK REPORT
+ * Identifies products below reorder_level and suggests purchase quantities.
+ */
+exports.getLowStockSuggestions = async (req, res) => {
+    try {
+        const query = `
+            SELECT 
+                p.product_id,
+                p.product_name,
+                p.sku,
+                i.quantity_on_hand,
+                p.reorder_level,
+                (p.reorder_level * 2 - i.quantity_on_hand) as suggested_restock_qty,
+                s.name as preferred_supplier,
+                s.id as supplier_id,
+                ps.supply_price,
+                -- Subquery to check for orders that are 'Pending' but not yet 'Received'
+                (SELECT COUNT(*) 
+                 FROM purchase_order_items poi 
+                 JOIN purchase_orders po ON poi.purchase_id = po.id 
+                 WHERE poi.product_id = p.product_id AND po.status = 'Pending'
+                ) as pending_order_count
+            FROM products p
+            JOIN inventory i ON p.product_id = i.product_id
+            JOIN product_suppliers ps ON ps.product_id = p.product_id
+            JOIN suppliers s ON ps.supplier_id = s.id
+            WHERE i.quantity_on_hand <= p.reorder_level
+              AND ps.supply_price = (
+                  SELECT MIN(supply_price) 
+                  FROM product_suppliers 
+                  WHERE product_id = p.product_id
+              )
+            GROUP BY 
+                p.product_id, 
+                p.product_name, 
+                p.sku, 
+                i.quantity_on_hand, 
+                p.reorder_level, 
+                s.name, 
+                s.id, 
+                ps.supply_price
+            ORDER BY (p.reorder_level - i.quantity_on_hand) DESC;
+        `;
+
+        const [rows] = await db.execute(query);
+
+        res.status(200).json({
+            success: true,
+            data: rows
+        });
+    } catch (error) {
+        console.error("Low Stock Report Error:", error.message);
+        res.status(500).json({
+            message: "Error generating report",
+            error: error.message
+        });
+    }
+};
+
+/** GET STOCK LEDGER
+ * Provides a history of stock adjustments for auditing purposes
+ */
+
+exports.getStockLedger = async (req, res) => {
+    const { product_id, startDate, endDate } = req.query;
+    let query = `
+        SELECT 
+            st.transaction_id, st.transaction_type, st.quantity_changed, st.reason, st.created_at,
+            p.product_name, p.sku, CONCAT(u.first_name, ' ', u.last_name) AS staff_member
+        FROM stock_transactions st
+        JOIN products p ON st.product_id = p.product_id
+        JOIN users u ON st.user_id = u.user_id
+        WHERE 1=1
+    `;
+    const params = [];
+
+    if (product_id) {
+        query += ` AND st.product_id = ?`;
+        params.push(product_id);
+    }
+    if (startDate && endDate) {
+        query += ` AND st.created_at BETWEEN ? AND ?`;
+        params.push(`${startDate} 00:00:00`, `${endDate} 23:59:59`);
+    }
+
+    query += ` ORDER BY st.created_at DESC LIMIT 100`;
+
+    try {
+        const [rows] = await db.execute(query, params);
+        res.status(200).json(rows);
+    } catch (error) {
+        res.status(500).json({ message: "Filter failed", error: error.message });
     }
 };

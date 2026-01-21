@@ -14,6 +14,9 @@ export interface User {
 }
 
 export function UsersTable({ rows = [] }: { rows: User[] }): React.JSX.Element {
+
+    const safeRows = Array.isArray(rows) ? rows : [];
+    
   return (
     <Card>
       <Box sx={{ overflowX: 'auto' }}>
@@ -28,7 +31,7 @@ export function UsersTable({ rows = [] }: { rows: User[] }): React.JSX.Element {
             </TableRow>
           </TableHead>
           <TableBody>
-            {rows.map((user) => (
+            {safeRows.map((user) => (
               <TableRow hover key={user.user_id}>
                 <TableCell>
                   <Typography variant="subtitle2">
@@ -42,6 +45,7 @@ export function UsersTable({ rows = [] }: { rows: User[] }): React.JSX.Element {
                     size="small" 
                     color={user.role === 'admin' ? 'primary' : 'default'} 
                     variant="outlined"
+                    onClick={(e) => {e.preventDefault}}
                   />
                 </TableCell>
                 <TableCell>
@@ -49,6 +53,7 @@ export function UsersTable({ rows = [] }: { rows: User[] }): React.JSX.Element {
                     label={user.active ? 'Active' : 'Disabled'} 
                     color={user.active ? 'success' : 'error'} 
                     size="small" 
+                    onClick={(e) => {e.preventDefault}}
                   />
                 </TableCell>
                 <TableCell>
@@ -56,6 +61,15 @@ export function UsersTable({ rows = [] }: { rows: User[] }): React.JSX.Element {
                 </TableCell>
               </TableRow>
             ))}
+            {safeRows.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={5} align="center">
+                  <Typography variant="body2" sx={{ py: 2 }}>
+                    No users found.
+                  </Typography>
+                </TableCell>
+              </TableRow>
+            )}
           </TableBody>
         </Table>
       </Box>
