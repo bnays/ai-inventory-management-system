@@ -34,7 +34,7 @@ export default function PurchasesPage() {
     return (
         <Stack spacing={3}>
             <Stack direction="row" spacing={3} sx={{ justifyContent: 'space-between' }}>
-                <Typography variant="h4">Purchase Order</Typography>
+                <Typography variant="h4" fontWeight="bold">Purchase Order</Typography>
                 <Button startIcon={<PlusIcon />} variant="contained" onClick={() => router.push('/dashboard/purchases/new')}>
                 Create New Purchase Order
                 </Button>

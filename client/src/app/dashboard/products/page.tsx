@@ -64,7 +64,7 @@ const [isEditOpen, setIsEditOpen] = React.useState(false);
   return (
     <Stack spacing={3}>
       <Stack direction="row" spacing={3} sx={{ justifyContent: 'space-between' }}>
-        <Typography variant="h4">Product Catalog</Typography>
+        <Typography variant="h4" fontWeight="bold">Product Management</Typography>
         <Button startIcon={<PlusIcon />} variant="contained" onClick={() => setIsAddOpen(true)}>
           Add Product
         </Button>

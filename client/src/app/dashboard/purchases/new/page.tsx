@@ -93,7 +93,7 @@ export default function CreatePurchaseOrder() {
         <IconButton onClick={() => router.push('/dashboard/purchases')}>
           <CaretLeftIcon size={24} />
         </IconButton>
-        <Typography variant="h4">New Purchase Order</Typography>
+        <Typography variant="h4" fontWeight="bold">New Purchase Order</Typography>
       </Stack>
 
       <Paper sx={{ p: 3, mb: 3, borderRadius: 2 }}>

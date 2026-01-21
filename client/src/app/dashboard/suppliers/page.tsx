@@ -60,7 +60,7 @@ export default function Page(): React.JSX.Element {
   return (
     <Stack spacing={3}>
       <Stack direction="row" spacing={3} sx={{ alignItems: 'center', justifyContent: 'space-between' }}>
-        <Typography variant="h4">Suppliers</Typography>
+        <Typography variant="h4" fontWeight="bold">Suppliers</Typography>
         <Button 
           onClick={() => setIsAddOpen(true)}
           startIcon={<PlusIcon fontSize="var(--icon-fontSize-md)" />} 

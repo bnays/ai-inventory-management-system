@@ -3,8 +3,11 @@ import { paths } from '@/paths';
 
 export const navItems = [
   { key: 'dashboard', title: 'Dashboard', href: paths.dashboard.overview, icon: 'chart-pie' },
-  { key: 'users', title: 'Users', href: paths.dashboard.customers, icon: 'users' },
+  { key: 'users', title: 'Users', href: paths.dashboard.users, icon: 'users' },
+  { key: 'customers', title: 'Customers', href: paths.dashboard.customers, icon: 'users' },
   { key: 'products', title: 'Products', href: paths.dashboard.products, icon: 'users' },
+  { key: 'restock', title: 'Restock Suggestions', href: paths.dashboard.restock, icon: 'chart-pie' },
+  { key: 'ledger', title: 'Stock Ledger', href: paths.dashboard.ledger, icon: 'chart-pie' },
   { key: 'categories', title: 'Categories', href: paths.dashboard.categories, icon: 'users' },
   { key: 'suppliers', title: 'Suppliers', href: paths.dashboard.suppliers, icon: 'users' },
   { key: 'purchases', title: 'Purchases', href: paths.dashboard.purchases, icon: 'users' },

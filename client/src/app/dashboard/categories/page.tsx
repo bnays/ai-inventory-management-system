@@ -57,7 +57,7 @@ export default function Page(): React.JSX.Element {
   return (
     <Stack spacing={3}>
       <Stack direction="row" spacing={3} sx={{ justifyContent: 'space-between' }}>
-        <Typography variant="h4">Categories</Typography>
+        <Typography variant="h4" fontWeight="bold">Categories</Typography>
         <Button 
           startIcon={<PlusIcon />} 
           variant="contained" 
