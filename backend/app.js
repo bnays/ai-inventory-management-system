@@ -6,8 +6,7 @@ require('dotenv').config(); // Ensure your .env variables are loaded
 // 1. Import Controllers
 const inventoryController = require('./controllers/inventoryController');
 const userController = require('./controllers/userController');
-
-// Use process.env.PORT for the server port (typically 5000)
+const csvtodbController = require('./controllers/csvtodbController');// Use process.env.PORT for the server port (typically 5000)
 const port = process.env.PORT || 5000;
 
 // --- Middleware ---
@@ -68,6 +67,13 @@ app.delete('/api/inventory/:id',
 app.get('/api/users',
     protect(['admin']),
     userController.getAllUsers
+);
+
+// csv to db
+app.post(
+    '/api/csvtodb/products',
+    protect(['admin']),
+    csvtodbController.importProducts
 );
 
 app.listen(port, () => {
