@@ -62,3 +62,26 @@ exports.updateCustomer = async (req, res) => {
         res.status(500).json({ message: "Error updating customer", error: error.message });
     }
 };
+
+
+// controllers/customer.controller.js
+exports.deleteCustomer = async (req, res) => {
+    const { id } = req.params;
+    try {
+        const result = await db.query('DELETE FROM customers WHERE customer_id = $1', [id]);
+
+        if (result.rowCount === 0) {
+            return res.status(404).json({ message: "Customer not found." });
+        }
+        res.json({ message: "Customer deleted successfully" });
+    } catch (error) {
+        // Catching the Foreign Key Constraint error
+        if (error.code === '23503') {
+            return res.status(400).json({
+                message: "This customer has active sales orders and cannot be deleted."
+            });
+        }
+        // Any other server error
+        res.status(500).json({ message: "Internal server error occurred." });
+    }
+};

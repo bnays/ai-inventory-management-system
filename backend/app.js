@@ -11,7 +11,8 @@ const supplierController = require('./controllers/supplierController');
 const purchaseController = require('./controllers/purchaseController');
 const saleController = require('./controllers/saleController');
 const customerController = require('./controllers/customerController');
-
+const dashboardController = require('./controllers/dashboardController');
+const notificationController = require('./controllers/notificationController');
 // Use process.env.PORT for the server port (typically 5000)
 const port = process.env.PORT || 5000;
 
@@ -73,6 +74,9 @@ app.delete('/api/inventory/:id',
     inventoryController.deleteProduct
 );
 
+// Staff and Admins can view stock ledger/history
+app.get('/api/inventory/ledger', protect(['admin', 'user']), inventoryController.getStockLedger);
+
 // --- Category Routes ---
 
 // All logged-in users can view categories; only admins can create them
@@ -99,7 +103,26 @@ app.get('/api/purchases/:id', protect(['admin', 'user']), purchaseController.get
 // The critical 'Receive' button that increments inventory
 app.patch('/api/purchases/:id/receive', protect(['admin', 'user']), purchaseController.receivePurchaseOrder);
 
+// Staff/Admins can see suggested restocks based on reorder_level
+app.get('/api/inventory/low-stock',
+    protect(['admin', 'user']),
+    inventoryController.getLowStockSuggestions
+);
+
+// Create an automated PO from the low-stock report
+app.post('/api/purchases/quick-purchase',
+    protect(['admin']),
+    purchaseController.generateQuickPurchase
+);
+
 // --- Sales Module Routes ---
+
+// NEW: Export all sales data to CSV for AI training
+app.get('/api/sales/export',
+    protect(['admin']),
+    saleController.exportSalesCSV
+);
+
 // Process a customer sale and deduct inventory automatically
 app.post('/api/sales', protect(['admin', 'user']), saleController.createSaleOrder);
 
@@ -140,6 +163,21 @@ app.patch('/api/customers/:id',
     protect(['admin']),
     customerController.updateCustomer
 );
+
+app.delete('/api/customers/:id',
+    protect(['admin']),
+    customerController.deleteCustomer
+);
+
+// --- Dashboard Summary Route ---
+app.get('/api/dashboard/summary',
+    protect(['admin', 'user']),
+    dashboardController.getDashboardSummary
+);
+
+
+app.get('/api/notifications', protect(['admin', 'user']), notificationController.getNotifications);
+app.patch('/api/notifications/:id/read', protect(['admin', 'user']), notificationController.markAsRead);
 
 
 

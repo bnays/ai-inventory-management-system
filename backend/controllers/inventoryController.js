@@ -231,3 +231,99 @@ exports.deleteProduct = async (req, res) => {
         connection.release();
     }
 };
+
+/**
+ * GET LOW STOCK REPORT
+ * Identifies products below reorder_level and suggests purchase quantities.
+ */
+exports.getLowStockSuggestions = async (req, res) => {
+    try {
+        const query = `
+            SELECT 
+                p.product_id,
+                p.product_name,
+                p.sku,
+                i.quantity_on_hand,
+                p.reorder_level,
+                (p.reorder_level * 2 - i.quantity_on_hand) as suggested_restock_qty,
+                s.name as preferred_supplier,
+                s.id as supplier_id,
+                ps.supply_price,
+                -- Subquery to check for orders that are 'Pending' but not yet 'Received'
+                (SELECT COUNT(*) 
+                 FROM purchase_order_items poi 
+                 JOIN purchase_orders po ON poi.purchase_id = po.id 
+                 WHERE poi.product_id = p.product_id AND po.status = 'Pending'
+                ) as pending_order_count
+            FROM products p
+            JOIN inventory i ON p.product_id = i.product_id
+            JOIN product_suppliers ps ON ps.product_id = p.product_id
+            JOIN suppliers s ON ps.supplier_id = s.id
+            WHERE i.quantity_on_hand <= p.reorder_level
+              AND ps.supply_price = (
+                  SELECT MIN(supply_price) 
+                  FROM product_suppliers 
+                  WHERE product_id = p.product_id
+              )
+            GROUP BY 
+                p.product_id, 
+                p.product_name, 
+                p.sku, 
+                i.quantity_on_hand, 
+                p.reorder_level, 
+                s.name, 
+                s.id, 
+                ps.supply_price
+            ORDER BY (p.reorder_level - i.quantity_on_hand) DESC;
+        `;
+
+        const [rows] = await db.execute(query);
+
+        res.status(200).json({
+            success: true,
+            data: rows
+        });
+    } catch (error) {
+        console.error("Low Stock Report Error:", error.message);
+        res.status(500).json({
+            message: "Error generating report",
+            error: error.message
+        });
+    }
+};
+
+/** GET STOCK LEDGER
+ * Provides a history of stock adjustments for auditing purposes
+ */
+
+exports.getStockLedger = async (req, res) => {
+    const { product_id, startDate, endDate } = req.query;
+    let query = `
+        SELECT 
+            st.transaction_id, st.transaction_type, st.quantity_changed, st.reason, st.created_at,
+            p.product_name, p.sku, CONCAT(u.first_name, ' ', u.last_name) AS staff_member
+        FROM stock_transactions st
+        JOIN products p ON st.product_id = p.product_id
+        JOIN users u ON st.user_id = u.user_id
+        WHERE 1=1
+    `;
+    const params = [];
+
+    if (product_id) {
+        query += ` AND st.product_id = ?`;
+        params.push(product_id);
+    }
+    if (startDate && endDate) {
+        query += ` AND st.created_at BETWEEN ? AND ?`;
+        params.push(`${startDate} 00:00:00`, `${endDate} 23:59:59`);
+    }
+
+    query += ` ORDER BY st.created_at DESC LIMIT 100`;
+
+    try {
+        const [rows] = await db.execute(query, params);
+        res.status(200).json(rows);
+    } catch (error) {
+        res.status(500).json({ message: "Filter failed", error: error.message });
+    }
+};

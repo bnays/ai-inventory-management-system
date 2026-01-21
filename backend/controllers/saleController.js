@@ -1,28 +1,26 @@
 const db = require('../config/db');
+const { Parser } = require('json2csv');
 
 /**
  * CREATE SALE ORDER
- * Now includes customer_id and strict inventory validation.
+ * Handles atomic inventory deduction, transaction logging, and low-stock alerting.
  */
 exports.createSaleOrder = async (req, res) => {
-    // Note: user_id should ideally come from your auth middleware (req.user.id)
     const { user_id, customer_id, items, tax, discount, shipping_cost, payment_method } = req.body;
     const connection = await db.getConnection();
 
     try {
         await connection.beginTransaction();
 
-        // 1. Calculate total and verify stock
+        // 1. Calculate total and Insert Header
         const total_amount = items.reduce((sum, item) => sum + (item.quantity * item.unit_price), 0);
 
-        // 2. Insert into sale_orders (Header)
-        // Now includes customer_id for full traceability
         const orderSql = `
             INSERT INTO sale_orders (user_id, customer_id, total_amount, tax, discount, shipping_cost, status, payment_method) 
             VALUES (?, ?, ?, ?, ?, ?, 'Completed', ?)
         `;
         const [orderResult] = await connection.execute(orderSql, [
-            user_id || 1, // Fallback to 1 for testing if user_id isn't in body
+            user_id || 1,
             customer_id,
             total_amount,
             tax || 0,
@@ -32,13 +30,9 @@ exports.createSaleOrder = async (req, res) => {
         ]);
         const orderId = orderResult.insertId;
 
-        // 3. Process each item: Add to order_items and Deduct from inventory
+        // 2. Process each item
         for (const item of items) {
-            await connection.execute(
-                'INSERT INTO sale_order_items (order_id, product_id, quantity, unit_price) VALUES (?, ?, ?, ?)',
-                [orderId, item.product_id, item.quantity, item.unit_price]
-            );
-
+            // A. Update inventory with strict stock check
             const [updateResult] = await connection.execute(
                 'UPDATE inventory SET quantity_on_hand = quantity_on_hand - ? WHERE product_id = ? AND quantity_on_hand >= ?',
                 [item.quantity, item.product_id, item.quantity]
@@ -47,10 +41,48 @@ exports.createSaleOrder = async (req, res) => {
             if (updateResult.affectedRows === 0) {
                 throw new Error(`Insufficient stock for product ID: ${item.product_id}`);
             }
+
+            // B. Insert Line Item
+            await connection.execute(
+                'INSERT INTO sale_order_items (order_id, product_id, quantity, unit_price) VALUES (?, ?, ?, ?)',
+                [orderId, item.product_id, item.quantity, item.unit_price]
+            );
+
+            // C. LOG STOCK TRANSACTION (Outflow)
+            // Essential for the Sydney hub audit trail
+            await connection.execute(
+                `INSERT INTO stock_transactions 
+                 (product_id, user_id, transaction_type, quantity_changed, reference_id, reason) 
+                 VALUES (?, ?, 'Outflow', ?, ?, ?)`,
+                [
+                    item.product_id,
+                    user_id || 1,
+                    -item.quantity, // Negative represents stock leaving the warehouse
+                    orderId,
+                    `Sale Order #${orderId}`
+                ]
+            );
+
+            // D. Post-deduction check for Low Stock Notification
+            const [stockData] = await connection.execute(
+                `SELECT p.product_name, i.quantity_on_hand, p.reorder_level 
+                 FROM inventory i 
+                 JOIN products p ON i.product_id = p.product_id 
+                 WHERE i.product_id = ?`,
+                [item.product_id]
+            );
+
+            const product = stockData[0];
+            if (product.quantity_on_hand <= product.reorder_level) {
+                await connection.execute(
+                    'INSERT INTO notifications (type, message, product_id) VALUES (?, ?, ?)',
+                    ['Low Stock', `Urgent: ${product.product_name} is now at ${product.quantity_on_hand} units in Sydney Hub.`, item.product_id]
+                );
+            }
         }
 
         await connection.commit();
-        res.status(201).json({ message: "Sale completed and stock updated", orderId });
+        res.status(201).json({ message: "Sale completed, stock updated, and transaction logged", orderId });
 
     } catch (error) {
         await connection.rollback();
@@ -62,7 +94,7 @@ exports.createSaleOrder = async (req, res) => {
 
 /**
  * GET ALL SALES
- * Joins both users (staff) and customers for the main table
+ * Joins customers and users for the dashboard table
  */
 exports.getAllSales = async (req, res) => {
     try {
@@ -70,12 +102,12 @@ exports.getAllSales = async (req, res) => {
             SELECT 
                 so.*, 
                 c.name AS customer_name,
+                c.address AS customer_address,
                 CONCAT(u.first_name, ' ', u.last_name) AS processed_by
             FROM sale_orders so
             LEFT JOIN customers c ON so.customer_id = c.customer_id
             LEFT JOIN users u ON so.user_id = u.user_id
-            ORDER BY so.created_at DESC
-            LIMIT 20 OFFSET 0;
+            ORDER BY so.created_at DESC;
         `;
         const [rows] = await db.execute(query);
         res.status(200).json(rows);
@@ -86,7 +118,7 @@ exports.getAllSales = async (req, res) => {
 
 /**
  * GET SALE BY ID
- * Provides full breakdown including customer address for the printable invoice
+ * Provides detailed breakdown for the printable dispatch note
  */
 exports.getSaleById = async (req, res) => {
     const { id } = req.params;
@@ -118,5 +150,42 @@ exports.getSaleById = async (req, res) => {
         res.status(200).json({ ...header[0], items });
     } catch (error) {
         res.status(500).json({ message: "Error fetching details", error: error.message });
+    }
+};
+
+/**
+ * EXPORT SALES CSV
+ * Denormalized data for AI training and reporting
+ */
+exports.exportSalesCSV = async (req, res) => {
+    try {
+        const query = `
+            SELECT 
+                so.id AS order_id,
+                DATE(so.created_at) AS sale_date,
+                c.name AS customer_name,
+                p.product_name,
+                soi.quantity AS quantity_sold,
+                soi.unit_price AS selling_price,
+                so.tax,
+                so.discount,
+                so.status
+            FROM sale_order_items soi
+            JOIN sale_orders so ON soi.order_id = so.id
+            JOIN products p ON soi.product_id = p.product_id
+            LEFT JOIN customers c ON so.customer_id = c.customer_id
+            WHERE so.status = 'Completed'
+            ORDER BY so.created_at DESC;
+        `;
+
+        const [rows] = await db.execute(query);
+        const json2csvParser = new Parser();
+        const csv = json2csvParser.parse(rows);
+
+        res.header('Content-Type', 'text/csv');
+        res.attachment(`logix_sales_export_${new Date().toISOString().split('T')[0]}.csv`);
+        return res.send(csv);
+    } catch (error) {
+        res.status(500).json({ message: "Export failed", error: error.message });
     }
 };
