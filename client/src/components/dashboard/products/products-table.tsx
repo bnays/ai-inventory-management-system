@@ -1,29 +1,20 @@
-// src/components/dashboard/products/products-table.tsx
 'use client';
 
 import * as React from 'react';
 import {
-  Box,
-  Card,
-  Checkbox,
-  Chip,
-  Divider,
-  Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TablePagination,
-  TableRow,
-  Typography,
-  IconButton,
-  Tooltip,
+  Box, Card, Chip, Divider, Stack, Table, TableBody, 
+  TableCell, TableHead, TablePagination, TableRow, 
+  Typography, IconButton, Tooltip, Avatar
 } from '@mui/material';
-import { Pencil as PencilIcon } from '@phosphor-icons/react/dist/ssr/Pencil';
-import { Trash as TrashIcon } from '@phosphor-icons/react/dist/ssr/Trash';
+import { 
+  PencilSimple as PencilIcon, 
+  Trash as TrashIcon, 
+  WarningCircle, 
+  CheckCircle 
+} from '@phosphor-icons/react';
 
 export interface Product {
-  product_id: string; // Matches your MySQL primary key
+  product_id: string;
   product_name: string;
   sku: string;
   category?: string;
@@ -40,15 +31,15 @@ export interface Product {
   }[];
 }
 
-interface ProductsTableProps {
+export interface ProductsTableProps {
   count?: number;
   page?: number;
   rows?: Product[];
   rowsPerPage?: number;
   onPageChange: (event: unknown, newPage: number) => void;
   onRowsPerPageChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
-  onEdit: (product: Product) => void; // Trigger for edit modal
-  onDelete: (product: Product) => void; // Trigger for delete dialog
+  onEdit: (product: Product) => void;
+  onDelete: (product: Product) => void;
 }
 
 export function ProductsTable({
@@ -62,65 +53,90 @@ export function ProductsTable({
   onDelete,
 }: ProductsTableProps): React.JSX.Element {
   return (
-    <Card>
+    <Card sx={{ border: 'none', boxShadow: 'none' }}>
       <Box sx={{ overflowX: 'auto' }}>
         <Table sx={{ minWidth: '1000px' }}>
-          <TableHead>
+          <TableHead sx={{ bgcolor: '#fcfcfd' }}>
             <TableRow>
-              <TableCell padding="checkbox">
-                <Checkbox />
-              </TableCell>
-              <TableCell>Product Name</TableCell>
-              <TableCell>SKU</TableCell>
-              <TableCell>Category</TableCell>
-              <TableCell>Price</TableCell>
-              <TableCell>Stock Level</TableCell>
-              <TableCell>Status</TableCell>
-              <TableCell align="right">Actions</TableCell>
+              <TableCell sx={{ fontWeight: 700, color: 'text.secondary', fontSize: '0.75rem', textTransform: 'uppercase' }}>Product Name</TableCell>
+              <TableCell sx={{ fontWeight: 700, color: 'text.secondary', fontSize: '0.75rem', textTransform: 'uppercase' }}>SKU</TableCell>
+              <TableCell sx={{ fontWeight: 700, color: 'text.secondary', fontSize: '0.75rem', textTransform: 'uppercase' }}>Category</TableCell>
+              <TableCell sx={{ fontWeight: 700, color: 'text.secondary', fontSize: '0.75rem', textTransform: 'uppercase' }}>Price (AUD)</TableCell>
+              <TableCell sx={{ fontWeight: 700, color: 'text.secondary', fontSize: '0.75rem', textTransform: 'uppercase' }}>Inventory</TableCell>
+              <TableCell sx={{ fontWeight: 700, color: 'text.secondary', fontSize: '0.75rem', textTransform: 'uppercase' }}>Status</TableCell>
+              <TableCell align="right" sx={{ fontWeight: 700, color: 'text.secondary', fontSize: '0.75rem', textTransform: 'uppercase' }}>Actions</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {rows.map((row) => {
-              // Inventory logic for low stock warnings
               const isLowStock = Number(row.quantity_on_hand) <= Number(row.reorder_level);
               
               return (
-                <TableRow hover key={row.product_id}>
-                  <TableCell padding="checkbox">
-                    <Checkbox />
+                <TableRow hover key={row.product_id} sx={{ '&:last-child td, &:last-child th': { border: 0 } }}>
+                  <TableCell>
+                    <Stack direction="row" spacing={2} alignItems="center">
+                      <Typography variant="body2" fontWeight="600">{row.product_name}</Typography>
+                    </Stack>
                   </TableCell>
                   <TableCell>
-                    <Typography variant="subtitle2">{row.product_name}</Typography>
+                    <Typography variant="body2" color="text.secondary" sx={{ fontFamily: 'monospace' }}>
+                      {row.sku}
+                    </Typography>
                   </TableCell>
-                  <TableCell>{row.sku}</TableCell>
-                  <TableCell>{row.category || 'Uncategorized'}</TableCell>
                   <TableCell>
-                    {/* Currency formatting for Sydney market */}
-                    {new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD' }).format(row.unit_price)}
+                        <Chip 
+                            /* Use row.category (the name) from your SQL JOIN */
+                            label={row.category ? row.category : 'Uncategorized'} 
+                            size="small" 
+                            variant="outlined" 
+                            sx={{ 
+                            fontWeight: 600, 
+                            borderRadius: 1.5,
+                            bgcolor: row.category ? 'primary.50' : 'neutral.50',
+                            color: row.category ? 'primary.main' : 'text.secondary',
+                            borderColor: row.category ? 'primary.200' : 'neutral.200'
+                            }} 
+                        />
                   </TableCell>
-                  <TableCell>{row.quantity_on_hand}</TableCell>
+                  <TableCell>
+                    <Typography variant="body2" fontWeight="600">
+                      {new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD' }).format(row.unit_price)}
+                    </Typography>
+                  </TableCell>
+                  <TableCell>
+                    <Typography variant="body2" color={isLowStock ? 'error.main' : 'text.primary'} fontWeight="700">
+                      {row.quantity_on_hand}
+                    </Typography>
+                  </TableCell>
                   <TableCell>
                     <Chip
-                      label={isLowStock ? 'Low Stock' : 'In Stock'}
-                      color={isLowStock ? 'error' : 'success'}
+                      label={isLowStock ? 'Low Stock' : 'Optimal'}
                       size="small"
-                      onClick={(e) => {e.preventDefault}}
+                      sx={{ 
+                        fontWeight: 700, 
+                        bgcolor: isLowStock ? 'error.50' : 'success.50',
+                        color: isLowStock ? 'error.main' : 'success.main'
+                      }}
                     />
                   </TableCell>
                   <TableCell align="right">
                     <Stack direction="row" spacing={1} justifyContent="flex-end">
-                      <Tooltip title="Edit Product">
-                        <IconButton onClick={() => onEdit(row)} size="small">
-                          <PencilIcon size={20} />
+                      <Tooltip title="Edit SKU">
+                        <IconButton 
+                          onClick={() => onEdit(row)} 
+                          size="small"
+                          sx={{ color: 'primary.main', bgcolor: 'primary.50', '&:hover': { bgcolor: 'primary.100' } }}
+                        >
+                          <PencilIcon size={18} weight="bold" />
                         </IconButton>
                       </Tooltip>
                       <Tooltip title="Delete Product">
                         <IconButton 
                           onClick={() => onDelete(row)} 
-                          color="error" 
                           size="small"
+                          sx={{ color: 'error.main', bgcolor: 'error.50', '&:hover': { bgcolor: 'error.100' } }}
                         >
-                          <TrashIcon size={20} />
+                          <TrashIcon size={18} weight="bold" />
                         </IconButton>
                       </Tooltip>
                     </Stack>
@@ -128,14 +144,6 @@ export function ProductsTable({
                 </TableRow>
               );
             })}
-            
-            {rows.length === 0 && (
-              <TableRow>
-                <TableCell colSpan={8} align="center" sx={{ py: 3 }}>
-                  No products found in the warehouse.
-                </TableCell>
-              </TableRow>
-            )}
           </TableBody>
         </Table>
       </Box>
@@ -148,6 +156,7 @@ export function ProductsTable({
         page={page}
         rowsPerPage={rowsPerPage}
         rowsPerPageOptions={[5, 10, 25]}
+        sx={{ border: 'none' }}
       />
     </Card>
   );

@@ -1,65 +1,90 @@
+'use client';
+
 import * as React from 'react';
-import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-import Card from '@mui/material/Card';
-import CardActions from '@mui/material/CardActions';
-import CardHeader from '@mui/material/CardHeader';
-import Chip from '@mui/material/Chip';
-import Divider from '@mui/material/Divider';
-import type { SxProps } from '@mui/material/styles';
-import Table from '@mui/material/Table';
-import TableBody from '@mui/material/TableBody';
-import TableCell from '@mui/material/TableCell';
-import TableHead from '@mui/material/TableHead';
-import TableRow from '@mui/material/TableRow';
-import { ArrowRightIcon } from '@phosphor-icons/react/dist/ssr/ArrowRight';
+import { 
+  Box, Card, CardHeader, Divider, Table, TableBody, TableCell, 
+  TableHead, TableRow, Typography, Chip, IconButton, Tooltip, Stack 
+} from '@mui/material';
+import { Eye as EyeIcon } from '@phosphor-icons/react';
+import { useRouter } from 'next/navigation';
 import dayjs from 'dayjs';
 
 const statusMap = {
-  pending: { label: 'Pending', color: 'warning' },
-  delivered: { label: 'Delivered', color: 'success' },
-  refunded: { label: 'Refunded', color: 'error' },
+  Completed: { label: 'Completed', color: 'success' },
+  Pending: { label: 'Pending', color: 'warning' },
+  Cancelled: { label: 'Cancelled', color: 'error' },
 } as const;
 
-export interface Order {
-  id: string;
-  customer: { name: string };
-  amount: number;
-  status: 'pending' | 'delivered' | 'refunded';
-  createdAt: Date;
-}
+export function LatestOrders({ orders = [], sx }: { orders: any[], sx?: any }) {
+  const router = useRouter();
 
-export interface LatestOrdersProps {
-  orders?: Order[];
-  sx?: SxProps;
-}
+  // Calculate average for trend indicators
+  const averageValue = React.useMemo(() => {
+    if (orders.length === 0) return 0;
+    const total = orders.reduce((sum, order) => sum + (Number(order.amount) || 0), 0);
+    return total / orders.length;
+  }, [orders]);
 
-export function LatestOrders({ orders = [], sx }: LatestOrdersProps): React.JSX.Element {
   return (
-    <Card sx={sx}>
-      <CardHeader title="Latest orders" />
+    <Card sx={{ ...sx, borderRadius: 5, border: '1px solid #eaecf0', boxShadow: 'none' }}>
+      <CardHeader 
+        title={<Typography variant="h6" fontWeight="800">Recent Transactions</Typography>}
+        subheader="Real-time fulfillment metrics vs. Warehouse average" 
+      />
       <Divider />
       <Box sx={{ overflowX: 'auto' }}>
-        <Table sx={{ minWidth: 800 }}>
-          <TableHead>
+        <Table sx={{ minWidth: 600 }}>
+          <TableHead sx={{ bgcolor: '#fcfcfd' }}>
             <TableRow>
-              <TableCell>Order</TableCell>
-              <TableCell>Customer</TableCell>
-              <TableCell sortDirection="desc">Date</TableCell>
-              <TableCell>Status</TableCell>
+              <TableCell sx={{ fontWeight: 700, fontSize: '0.75rem', textTransform: 'uppercase' }}>Order ID</TableCell>
+              <TableCell sx={{ fontWeight: 700, fontSize: '0.75rem', textTransform: 'uppercase' }}>Customer</TableCell>
+              <TableCell sx={{ fontWeight: 700, fontSize: '0.75rem', textTransform: 'uppercase' }}>Amount (AUD)</TableCell>
+              <TableCell sx={{ fontWeight: 700, fontSize: '0.75rem', textTransform: 'uppercase' }}>Status</TableCell>
+              <TableCell align="right" sx={{ fontWeight: 700, fontSize: '0.75rem', textTransform: 'uppercase' }}>Action</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {orders.map((order) => {
-              const { label, color } = statusMap[order.status] ?? { label: 'Unknown', color: 'default' };
+              const status = statusMap[order.status as keyof typeof statusMap] ?? { label: 'COMPLETED', color: 'success' };
+              
+              // Validate and parse the amount to prevent $NaN
+              const orderAmount = Number(order.amount) || 0;
 
               return (
-                <TableRow hover key={order.id}>
-                  <TableCell>{order.id}</TableCell>
-                  <TableCell>{order.customer.name}</TableCell>
-                  <TableCell>{dayjs(order.createdAt).format('MMM D, YYYY')}</TableCell>
+                <TableRow key={order.id} hover>
                   <TableCell>
-                    <Chip color={color} label={label} size="small" />
+                    <Typography variant="body2" fontWeight="700">#{order.id}</Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      {dayjs(order.createdAt).format('DD MMM')}
+                    </Typography>
+                  </TableCell>
+                  <TableCell>
+                    <Typography variant="body2" fontWeight="600">{order.customer?.name || 'Walk-in'}</Typography>
+                  </TableCell>
+                  <TableCell>
+                    <Stack direction="row" spacing={1} alignItems="center">
+                      <Typography variant="body2" fontWeight="800">
+                        ${orderAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      </Typography>
+                    </Stack>
+                  </TableCell>
+                  <TableCell>
+                    <Chip 
+                      label={status.label.toUpperCase()} 
+                      color={status.color as any} 
+                      size="small" 
+                      variant="outlined"
+                      sx={{ fontWeight: 800, fontSize: '0.65rem', borderRadius: 1.5 }}
+                    />
+                  </TableCell>
+                  <TableCell align="right">
+                    <IconButton 
+                      size="small" 
+                      onClick={() => router.push(`/dashboard/sales/${order.id}`)}
+                      sx={{ color: 'primary.main', bgcolor: 'primary.50' }}
+                    >
+                      <EyeIcon size={18} weight="bold" />
+                    </IconButton>
                   </TableCell>
                 </TableRow>
               );
@@ -67,17 +92,6 @@ export function LatestOrders({ orders = [], sx }: LatestOrdersProps): React.JSX.
           </TableBody>
         </Table>
       </Box>
-      <Divider />
-      <CardActions sx={{ justifyContent: 'flex-end' }}>
-        <Button
-          color="inherit"
-          endIcon={<ArrowRightIcon fontSize="var(--icon-fontSize-md)" />}
-          size="small"
-          variant="text"
-        >
-          View all
-        </Button>
-      </CardActions>
     </Card>
   );
 }

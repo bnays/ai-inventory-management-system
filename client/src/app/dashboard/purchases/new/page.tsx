@@ -1,19 +1,25 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Box, Typography, Button, TextField, MenuItem, Paper, 
-  Table, TableBody, TableCell, TableContainer, TableHead, TableRow, IconButton, Stack 
+  Table, TableBody, TableCell, TableContainer, TableHead, TableRow, IconButton, Stack,
+  useTheme, Divider
 } from '@mui/material';
-// Using Phosphor Icons as requested
-import { Plus as PlusIcon } from '@phosphor-icons/react/dist/ssr/Plus';
-import { Trash as TrashIcon } from '@phosphor-icons/react/dist/ssr/Trash';
-import { CaretLeft as CaretLeftIcon } from '@phosphor-icons/react/dist/ssr/CaretLeft';
+import { 
+  Plus as PlusIcon,
+  Trash as TrashIcon,
+  CaretLeft as CaretLeftIcon,
+  ShoppingCartSimple,
+  CurrencyDollar,
+  WarningCircle
+} from '@phosphor-icons/react';
 
 import { useRouter } from 'next/navigation';
 import { usePurchases } from '@/contexts/purchase-context';
 import { useNotification } from '@/lib/notification';
 import { apiRequest } from '@/lib/api-client';
+import { GlobalSnackbar } from '@/components/core/global-snackbar';
 
 interface OrderItem {
   product_id: number;
@@ -22,103 +28,142 @@ interface OrderItem {
 }
 
 export default function CreatePurchaseOrder() {
+  const theme = useTheme();
   const router = useRouter();
   const { createPurchase } = usePurchases();
-  const { showNotification } = useNotification();
+  
+  // Notification System
+  const { notification, showNotification, hideNotification } = useNotification();
   
   const [suppliers, setSuppliers] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
   const [supplierId, setSupplierId] = useState<string>('');
   const [items, setItems] = useState<OrderItem[]>([{ product_id: 0, quantity: 1, cost_price: 0 }]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     const loadData = async () => {
-    try {
+      try {
         const [suppRes, prodRes] = await Promise.all([
-        apiRequest('/suppliers'),
-        apiRequest('/inventory')
+          apiRequest('/suppliers'),
+          apiRequest('/inventory')
         ]);
-        
-        // Check if response is { data: [...] } or just [...]
-        const suppliersList = suppRes.data || (Array.isArray(suppRes) ? suppRes : []);
-        const productsList = prodRes.data || (Array.isArray(prodRes) ? prodRes : []);
-        
-        setSuppliers(suppliersList);
-        setProducts(productsList);
-        
-        if (suppliersList.length === 0) showNotification("No suppliers found. Please add one first.", "warning");
-        if (productsList.length === 0) showNotification("No products found. Please add one first.", "warning");
-    } catch (error) {
-        showNotification("Failed to load setup data from server", "error");
-    }
+        setSuppliers(suppRes.data || suppRes || []);
+        setProducts(prodRes.data || prodRes || []);
+      } catch (error) {
+        showNotification("Critical: System failed to load catalog data.", "error");
+      }
     };
     loadData();
   }, [showNotification]);
 
-  const handleAddItem = () => {
-    setItems([...items, { product_id: 0, quantity: 1, cost_price: 0 }]);
-  };
-
-  const handleRemoveItem = (index: number) => {
-    if (items.length > 1) {
-      setItems(items.filter((_, i) => i !== index));
-    }
-  };
+  // --- GST & FINANCIAL CALCULATIONS ---
+  const totals = useMemo(() => {
+    const subtotal = items.reduce((acc, item) => acc + (item.quantity * item.cost_price), 0);
+    const gst = subtotal * 0.10; // 10% Australian GST
+    return { subtotal, gst, grandTotal: subtotal + gst };
+  }, [items]);
 
   const updateItem = (index: number, field: keyof OrderItem, value: number) => {
     const newItems = [...items];
-    newItems[index] = { ...newItems[index], [field]: value };
+    if (field === 'product_id') {
+      const selectedProd = products.find(p => p.product_id === value);
+      newItems[index] = { 
+        ...newItems[index], 
+        product_id: value,
+        cost_price: selectedProd ? Number(selectedProd.unit_price) : 0 
+      };
+    } else {
+      newItems[index] = { ...newItems[index], [field]: value };
+    }
     setItems(newItems);
+  };
+
+  const handleAddItem = () => setItems([...items, { product_id: 0, quantity: 1, cost_price: 0 }]);
+  
+  const handleRemoveItem = (index: number) => {
+    if (items.length > 1) setItems(items.filter((_, i) => i !== index));
+  };
+
+  // --- VALIDATION & SUBMISSION ---
+  const validateForm = () => {
+    if (!supplierId) {
+      showNotification("Validation Error: Please select a Supplier.", "error");
+      return false;
+    }
+    if (items.some(item => item.product_id === 0)) {
+      showNotification("Validation Error: One or more items have no product selected.", "error");
+      return false;
+    }
+    if (items.some(item => item.quantity <= 0)) {
+      showNotification("Validation Error: Quantity must be at least 1.", "error");
+      return false;
+    }
+    if (totals.grandTotal <= 0) {
+      showNotification("Validation Error: Order total must be greater than $0.", "error");
+      return false;
+    }
+    return true;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!supplierId || items.some(item => item.product_id === 0)) {
-      showNotification("Please select a supplier and products", "error");
-      return;
-    }
+    if (!validateForm()) return;
 
+    setIsSubmitting(true);
     try {
-      await createPurchase({ supplier_id: Number(supplierId), items });
-      showNotification("Purchase Order created successfully!", "success");
-      router.push('/dashboard/purchases');
+      await createPurchase({ 
+        supplier_id: Number(supplierId), 
+        items,
+        tax: totals.gst,
+        total_amount: totals.grandTotal 
+      });
+      setTimeout(() => router.push('/dashboard/purchases'), 1500);
     } catch (error: any) {
-      showNotification(error.message || "Failed to create order", "error");
+      showNotification(error.message || "Database Error: Could not save order.", "error");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   return (
-    <Stack spacing={3}>
-      <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 3 }}>
-        <IconButton onClick={() => router.push('/dashboard/purchases')}>
-          <CaretLeftIcon size={24} />
+    <Box sx={{ p: { xs: 2, md: 4 }, minHeight: '100vh' }}>
+      
+      {/* Header */}
+      <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 4 }}>
+        <IconButton onClick={() => router.push('/dashboard/purchases')} sx={{ bgcolor: 'white', border: '1px solid #eaecf0', borderRadius: 2 }}>
+          <CaretLeftIcon size={20} weight="bold" />
         </IconButton>
-        <Typography variant="h4" fontWeight="bold">New Purchase Order</Typography>
+        <Box>
+          <Typography variant="h4" fontWeight="800" sx={{ letterSpacing: '-0.02em' }}>Create New Purchase Order</Typography>
+        </Box>
       </Stack>
 
-      <Paper sx={{ p: 3, mb: 3, borderRadius: 2 }}>
+      <Paper sx={{ p: 4, borderRadius: 5, border: '1px solid #eaecf0', boxShadow: 'none' }}>
+        <Typography variant="subtitle1" fontWeight="700" sx={{ mb: 3 }}>1. Vendor Assignment</Typography>
         <TextField
-          select
-          fullWidth
-          label="Select Supplier"
-          value={supplierId}
+          select fullWidth label="Select Supplier" value={supplierId}
+          error={!supplierId && isSubmitting}
           onChange={(e) => setSupplierId(e.target.value)}
-          sx={{ mb: 4 }}
+          sx={{ mb: 4, '& .MuiOutlinedInput-root': { borderRadius: 3 } }}
         >
           {suppliers.map((s) => (
             <MenuItem key={s.id} value={s.id}>{s.name}</MenuItem>
           ))}
         </TextField>
 
-        <TableContainer>
+        <Divider sx={{ mb: 4 }} />
+
+        <Typography variant="subtitle1" fontWeight="700" sx={{ mb: 2 }}>2. Line Items (Taxable)</Typography>
+        <TableContainer sx={{ border: '1px solid #eaecf0', borderRadius: 4, mb: 2 }}>
           <Table>
-            <TableHead>
+            <TableHead sx={{ bgcolor: '#fcfcfd' }}>
               <TableRow>
-                <TableCell>Product</TableCell>
-                <TableCell width={150}>Quantity</TableCell>
-                <TableCell width={150}>Unit Cost ($)</TableCell>
-                <TableCell width={120}>Total</TableCell>
-                <TableCell width={80} align="right">Action</TableCell>
+                <TableCell sx={{ fontWeight: 700, fontSize: '0.75rem', textTransform: 'uppercase' }}>Product</TableCell>
+                <TableCell width={140} sx={{ fontWeight: 700, fontSize: '0.75rem', textTransform: 'uppercase' }}>Qty</TableCell>
+                <TableCell width={160} sx={{ fontWeight: 700, fontSize: '0.75rem', textTransform: 'uppercase' }}>Unit (ex. GST)</TableCell>
+                <TableCell width={140} sx={{ fontWeight: 700, fontSize: '0.75rem', textTransform: 'uppercase' }}>Subtotal</TableCell>
+                <TableCell width={60}></TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -126,45 +171,35 @@ export default function CreatePurchaseOrder() {
                 <TableRow key={index}>
                   <TableCell>
                     <TextField
-                      select
-                      fullWidth
-                      size="small"
-                      value={item.product_id}
+                      select fullWidth size="small" value={item.product_id}
                       onChange={(e) => updateItem(index, 'product_id', Number(e.target.value))}
                     >
                       {products.map((p) => (
-                        <MenuItem key={p.product_id} value={p.product_id}>{p.product_name}</MenuItem>
+                        <MenuItem key={p.product_id} value={p.product_id}>
+                          {p.product_name} <Typography variant="caption" sx={{ ml: 1, color: 'text.secondary' }}>({p.sku})</Typography>
+                        </MenuItem>
                       ))}
                     </TextField>
                   </TableCell>
                   <TableCell>
                     <TextField
-                      type="number"
-                      size="small"
-                      value={item.quantity}
+                      type="number" size="small" value={item.quantity}
                       onChange={(e) => updateItem(index, 'quantity', Number(e.target.value))}
                     />
                   </TableCell>
                   <TableCell>
                     <TextField
-                      type="number"
-                      size="small"
-                      value={item.cost_price}
+                      type="number" size="small" value={item.cost_price}
                       onChange={(e) => updateItem(index, 'cost_price', Number(e.target.value))}
+                      InputProps={{ startAdornment: <CurrencyDollar size={14} /> }}
                     />
                   </TableCell>
-                  <TableCell variant="body">
-                    <Typography variant="body2">
-                      ${(item.quantity * item.cost_price).toFixed(2)}
-                    </Typography>
+                  <TableCell>
+                    <Typography variant="body2" fontWeight="700">${(item.quantity * item.cost_price).toFixed(2)}</Typography>
                   </TableCell>
-                  <TableCell align="right">
-                    <IconButton 
-                      onClick={() => handleRemoveItem(index)} 
-                      color="error"
-                      disabled={items.length === 1}
-                    >
-                      <TrashIcon size={20} />
+                  <TableCell>
+                    <IconButton onClick={() => handleRemoveItem(index)} disabled={items.length === 1} color="error">
+                      <TrashIcon size={18} />
                     </IconButton>
                   </TableCell>
                 </TableRow>
@@ -173,31 +208,43 @@ export default function CreatePurchaseOrder() {
           </Table>
         </TableContainer>
 
-        <Button 
-          startIcon={<PlusIcon size={20} />} 
-          onClick={handleAddItem} 
-          sx={{ mt: 2 }}
-          variant="text"
-        >
-          Add Another Product
-        </Button>
+        <Button startIcon={<PlusIcon />} onClick={handleAddItem} sx={{ fontWeight: 600 }}>Add Item</Button>
+
+        {/* Financial Summary */}
+        <Box sx={{ mt: 4, p: 3, bgcolor: '#fcfcfd', borderRadius: 4, border: '1px solid #eaecf0', ml: 'auto', width: { xs: '100%', md: 350 } }}>
+           <Stack spacing={1.5}>
+              <Stack direction="row" justifyContent="space-between">
+                <Typography variant="body2" color="text.secondary">Subtotal (Net):</Typography>
+                <Typography variant="body2" fontWeight="600">${totals.subtotal.toFixed(2)}</Typography>
+              </Stack>
+              <Stack direction="row" justifyContent="space-between">
+                <Typography variant="body2" color="text.secondary">GST (10%):</Typography>
+                <Typography variant="body2" fontWeight="600">${totals.gst.toFixed(2)}</Typography>
+              </Stack>
+              <Divider />
+              <Stack direction="row" justifyContent="space-between" alignItems="center">
+                <Typography variant="subtitle1" fontWeight="800">Total (Inc. GST):</Typography>
+                <Typography variant="h5" fontWeight="900" color="primary.main">${totals.grandTotal.toFixed(2)}</Typography>
+              </Stack>
+           </Stack>
+        </Box>
       </Paper>
 
-      <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 2 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 2, mt: 3, pb: 4 }}>
+        <Button variant="outlined" onClick={() => router.push('/dashboard/purchases')} sx={{ borderRadius: 2.5 }}>Cancel</Button>
         <Button 
-          variant="outlined" 
-          onClick={() => router.push('/dashboard/purchases')}
+            variant="contained" 
+            onClick={handleSubmit} 
+            disabled={isSubmitting}
+            size="large" 
+            sx={{ borderRadius: 2.5, px: 4, fontWeight: 700 }}
         >
-          Cancel
-        </Button>
-        <Button 
-          variant="contained" 
-          onClick={handleSubmit}
-          size="large"
-        >
-          Create Purchase Order
+          {isSubmitting ? 'Processing...' : 'Create Purchase Order'}
         </Button>
       </Box>
-    </Stack>
+
+      {/* Global Snackbar Connection */}
+      <GlobalSnackbar state={notification} onClose={hideNotification} />
+    </Box>
   );
 }

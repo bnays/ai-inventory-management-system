@@ -4,17 +4,19 @@ import * as React from 'react';
 import RouterLink from 'next/link';
 import { useRouter } from 'next/navigation';
 import { zodResolver } from '@hookform/resolvers/zod';
-import Alert from '@mui/material/Alert';
-import Button from '@mui/material/Button';
-import FormControl from '@mui/material/FormControl';
-import FormHelperText from '@mui/material/FormHelperText';
-import InputLabel from '@mui/material/InputLabel';
-import Link from '@mui/material/Link';
-import OutlinedInput from '@mui/material/OutlinedInput';
-import Stack from '@mui/material/Stack';
-import Typography from '@mui/material/Typography';
-import { EyeIcon } from '@phosphor-icons/react/dist/ssr/Eye';
-import { EyeSlashIcon } from '@phosphor-icons/react/dist/ssr/EyeSlash';
+import { 
+  Alert, Button, FormControl, FormHelperText, InputLabel, 
+  Link, OutlinedInput, Stack, Typography, InputAdornment, 
+  IconButton, Box, Avatar, Divider 
+} from '@mui/material';
+import { 
+  LockKey, 
+  EnvelopeSimple, 
+  Eye, 
+  EyeSlash, 
+  Fingerprint, 
+  ShieldCheck 
+} from '@phosphor-icons/react';
 import { Controller, useForm } from 'react-hook-form';
 import { z as zod } from 'zod';
 
@@ -33,68 +35,79 @@ const defaultValues = { email: '', password: '' } satisfies Values;
 
 export function SignInForm(): React.JSX.Element {
   const router = useRouter();
-
   const { checkSession } = useUser();
-
-  const [showPassword, setShowPassword] = React.useState<boolean>();
-
+  const [showPassword, setShowPassword] = React.useState<boolean>(false);
   const [isPending, setIsPending] = React.useState<boolean>(false);
 
-  const {
-    control,
-    handleSubmit,
-    setError,
-    formState: { errors },
-  } = useForm<Values>({ defaultValues, resolver: zodResolver(schema) });
+  const { control, handleSubmit, setError, formState: { errors } } = useForm<Values>({ 
+    defaultValues, 
+    resolver: zodResolver(schema) 
+  });
 
   const onSubmit = React.useCallback(
     async (values: Values): Promise<void> => {
-        setIsPending(true);
+      setIsPending(true);
+      const { error } = await authClient.signInWithPassword(values);
 
-        const { error } = await authClient.signInWithPassword(values);
-
-        if (error) {
+      if (error) {
         setError('root', { type: 'server', message: error });
         setIsPending(false);
         return;
-        }
+      }
 
-        // 1. Force the UserProvider to fetch the user profile from /api/auth/me
-        await checkSession?.();
-
-        // 2. Explicitly push to the dashboard after the session is verified
-        router.push(paths.dashboard.overview);
-        
-        // 3. Optional: refresh ensures the UI (sidebar/header) reflects the new role
-        router.refresh();
+      await checkSession?.();
+      router.push(paths.dashboard.overview);
+      router.refresh();
     },
     [checkSession, router, setError]
-    );
+  );
 
   return (
-    <Stack spacing={4}>
-      <Stack spacing={1}>
-        <Typography variant="h4">Sign in</Typography>
+    <Stack spacing={4} sx={{ width: '100%', maxWidth: '400px' }}>
+      {/* --- Auth Header --- */}
+      <Stack spacing={1} textAlign="center">
+        <Box sx={{ display: 'flex', justifyContent: 'center', mb: 1 }}>
+          <Avatar sx={{ bgcolor: 'primary.main', width: 56, height: 56, boxShadow: 3 }}>
+            <Fingerprint size={32} weight="duotone" />
+          </Avatar>
+        </Box>
+        <Typography variant="h4" fontWeight="800" sx={{ letterSpacing: '-0.02em' }}>
+          Sign In
+        </Typography>
         <Typography color="text.secondary" variant="body2">
-          Don&apos;t have an account?{' '}
-          <Link component={RouterLink} href={paths.auth.signUp} underline="hover" variant="subtitle2">
-            Sign up
+          Logix Warehouse Staff Portal •{' '}
+          <Link component={RouterLink} href={paths.auth.signUp} underline="hover" variant="subtitle2" fontWeight="700">
+            Create account
           </Link>
         </Typography>
       </Stack>
+
       <form onSubmit={handleSubmit(onSubmit)}>
-        <Stack spacing={2}>
+        <Stack spacing={2.5}>
+          {/* Email Address */}
           <Controller
             control={control}
             name="email"
             render={({ field }) => (
               <FormControl error={Boolean(errors.email)}>
                 <InputLabel>Email address</InputLabel>
-                <OutlinedInput {...field} label="Email address" type="email" />
-                {errors.email ? <FormHelperText>{errors.email.message}</FormHelperText> : null}
+                <OutlinedInput 
+                  {...field} 
+                  label="Email address" 
+                  type="email" 
+                  sx={{ borderRadius: 2.5 }}
+                  startAdornment={
+                    <InputAdornment position="start">
+                      <EnvelopeSimple size={20} color="var(--mui-palette-neutral-500)" />
+                    </InputAdornment>
+                  }
+                />
+                {errors.email && <FormHelperText>{errors.email.message}</FormHelperText>}
               </FormControl>
             )}
           />
+
+          {/* Password */}
           <Controller
             control={control}
             name="password"
@@ -103,40 +116,43 @@ export function SignInForm(): React.JSX.Element {
                 <InputLabel>Password</InputLabel>
                 <OutlinedInput
                   {...field}
-                  endAdornment={
-                    showPassword ? (
-                      <EyeIcon
-                        cursor="pointer"
-                        fontSize="var(--icon-fontSize-md)"
-                        onClick={(): void => {
-                          setShowPassword(false);
-                        }}
-                      />
-                    ) : (
-                      <EyeSlashIcon
-                        cursor="pointer"
-                        fontSize="var(--icon-fontSize-md)"
-                        onClick={(): void => {
-                          setShowPassword(true);
-                        }}
-                      />
-                    )
-                  }
                   label="Password"
                   type={showPassword ? 'text' : 'password'}
+                  sx={{ borderRadius: 2.5 }}
+                  startAdornment={
+                    <InputAdornment position="start">
+                      <LockKey size={20} color="var(--mui-palette-neutral-500)" />
+                    </InputAdornment>
+                  }
+                  endAdornment={
+                    <InputAdornment position="end">
+                      <IconButton onClick={() => setShowPassword(!showPassword)} edge="end">
+                        {showPassword ? <Eye size={20} /> : <EyeSlash size={20} />}
+                      </IconButton>
+                    </InputAdornment>
+                  }
                 />
-                {errors.password ? <FormHelperText>{errors.password.message}</FormHelperText> : null}
+                {errors.password && <FormHelperText>{errors.password.message}</FormHelperText>}
               </FormControl>
             )}
           />
-          <div>
-            <Link component={RouterLink} href={paths.auth.resetPassword} variant="subtitle2">
+
+          <Stack direction="row" justifyContent="flex-end">
+            <Link component={RouterLink} href={paths.auth.resetPassword} variant="subtitle2" color="text.secondary" underline="hover">
               Forgot password?
             </Link>
-          </div>
-          {errors.root ? <Alert color="error">{errors.root.message}</Alert> : null}
-          <Button disabled={isPending} type="submit" variant="contained">
-            Sign in
+          </Stack>
+
+          {errors.root && <Alert severity="error" variant="filled" sx={{ borderRadius: 2 }}>{errors.root.message}</Alert>}
+
+          <Button 
+            disabled={isPending} 
+            type="submit" 
+            variant="contained" 
+            size="large"
+            sx={{ borderRadius: 2.5, py: 1.5, fontWeight: 700, textTransform: 'none', fontSize: '1rem' }}
+          >
+            {isPending ? 'Authenticating...' : 'Sign In'}
           </Button>
         </Stack>
       </form>

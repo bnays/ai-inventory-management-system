@@ -1,11 +1,9 @@
-// src/app/dashboard/page.tsx
-
 "use client";
 
 import * as React from 'react';
 import { useEffect, useState } from 'react';
-import Grid from '@mui/material/Grid';
-import dayjs from 'dayjs';
+import { Grid, Box, CircularProgress, Typography, Stack, useTheme } from '@mui/material';
+import { ChartPie, ShoppingCart, Users, TrendUp } from '@phosphor-icons/react';
 
 import { Budget } from '@/components/dashboard/overview/budget';
 import { LatestOrders } from '@/components/dashboard/overview/latest-orders';
@@ -16,12 +14,10 @@ import { TotalCustomers } from '@/components/dashboard/overview/total-customers'
 import { TotalProfit } from '@/components/dashboard/overview/total-profit';
 import { Traffic } from '@/components/dashboard/overview/traffic';
 import { apiRequest } from '@/lib/api-client';
-import { Box } from '@mui/system';
-import { CircularProgress } from '@mui/material';
 
 export default function Page(): React.JSX.Element {
-
-    const [data, setData] = useState<any>(null);
+  const theme = useTheme();
+  const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -40,135 +36,63 @@ export default function Page(): React.JSX.Element {
 
   if (loading || !data) {
     return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', mt: 10 }}>
-        <CircularProgress />
+      <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', py: 15, bgcolor: '#f9fafb', minHeight: '100vh' }}>
+        <CircularProgress size={45} thickness={4} />
+        <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>Synchronizing Command Center data...</Typography>
       </Box>
     );
   }
 
   return (
-    <Grid container spacing={3}>
-      <Grid
-        size={{
-          lg: 3,
-          sm: 6,
-          xs: 12,
-        }}
-      >
-        <Budget diff={data.invDiff} trend="up" sx={{ height: '100%' }} value={`$${data.totalInventoryValue}k`} />
-      </Grid>
-      <Grid
-        size={{
-          lg: 3,
-          sm: 6,
-          xs: 12,
-        }}
-      >
-        <TotalCustomers diff={data.custDiff} trend="down" sx={{ height: '100%' }} value={data.retailPartnerCount} />
-      </Grid>
-      <Grid
-        size={{
-          lg: 3,
-          sm: 6,
-          xs: 12,
-        }}
-      >
-        <TasksProgress sx={{ height: '100%' }} value={data.stockHealthScore} />
-      </Grid>
-      <Grid
-        size={{
-          lg: 3,
-          sm: 6,
-          xs: 12,
-        }}
-      >
-        <TotalProfit sx={{ height: '100%' }} value={`$${data.totalSalesRevenue}k`} />
-      </Grid>
-      <Grid
-        size={{
-          lg: 8,
-          xs: 12,
-        }}
-      >
-        <Sales chartSeries={data.salesChartSeries} sx={{ height: '100%' }} />
-      </Grid>
-      <Grid
-        size={{
-          lg: 4,
-          md: 6,
-          xs: 12,
-        }}
-      >
-        <Traffic 
-    chartSeries={data.categoryData} 
-    labels={data.categoryLabels} 
-    sx={{ height: '100%' }} 
-  />
-      </Grid>
-      <Grid
-        size={{
-          lg: 4,
-          md: 6,
-          xs: 12,
-        }}
-      >
-        <LatestOrders orders={data.recentTransactions} sx={{ height: '100%' }} />
-      </Grid>
-      <Grid
-        size={{
-          lg: 8,
-          md: 12,
-          xs: 12,
-        }}
-      >
-        <LatestOrders
-          orders={[
-            {
-              id: 'ORD-007',
-              customer: { name: 'Ekaterina Tankova' },
-              amount: 30.5,
-              status: 'pending',
-              createdAt: dayjs().subtract(10, 'minutes').toDate(),
-            },
-            {
-              id: 'ORD-006',
-              customer: { name: 'Cao Yu' },
-              amount: 25.1,
-              status: 'delivered',
-              createdAt: dayjs().subtract(10, 'minutes').toDate(),
-            },
-            {
-              id: 'ORD-004',
-              customer: { name: 'Alexa Richardson' },
-              amount: 10.99,
-              status: 'refunded',
-              createdAt: dayjs().subtract(10, 'minutes').toDate(),
-            },
-            {
-              id: 'ORD-003',
-              customer: { name: 'Anje Keizer' },
-              amount: 96.43,
-              status: 'pending',
-              createdAt: dayjs().subtract(10, 'minutes').toDate(),
-            },
-            {
-              id: 'ORD-002',
-              customer: { name: 'Clarke Gillebert' },
-              amount: 32.54,
-              status: 'delivered',
-              createdAt: dayjs().subtract(10, 'minutes').toDate(),
-            },
-            {
-              id: 'ORD-001',
-              customer: { name: 'Adam Denisov' },
-              amount: 16.76,
-              status: 'delivered',
-              createdAt: dayjs().subtract(10, 'minutes').toDate(),
-            },
-          ]}
-          sx={{ height: '100%' }}
-        />
-      </Grid>
-    </Grid>
+    <Box sx={{ p: { xs: 2, md: 4 }, bgcolor: '#f9fafb', minHeight: '100vh' }}>
+      <Stack spacing={4}>
+
+        {/* --- TOP ROW: KPI CARDS --- */}
+        <Grid container spacing={3}>
+          <Grid size={{ lg: 3, sm: 6, xs: 12 }}>
+            <Budget diff={data.invDiff} trend="up" sx={{ height: '100%' }} value={`$${data.totalInventoryValue}k`} />
+          </Grid>
+          <Grid size={{ lg: 3, sm: 6, xs: 12 }}>
+            <TotalCustomers diff={data.custDiff} trend="down" sx={{ height: '100%' }} value={data.retailPartnerCount} />
+          </Grid>
+          <Grid size={{ lg: 3, sm: 6, xs: 12 }}>
+            <TasksProgress sx={{ height: '100%' }} value={data.stockHealthScore} />
+          </Grid>
+          <Grid size={{ lg: 3, sm: 6, xs: 12 }}>
+            <TotalProfit sx={{ height: '100%' }} value={`$${data.totalSalesRevenue}k`} />
+          </Grid>
+        </Grid>
+
+        {/* --- MIDDLE ROW: ANALYTICS --- */}
+        <Grid container spacing={3}>
+          <Grid size={{ lg: 8, xs: 12 }}>
+            <Sales chartSeries={data.salesChartSeries} sx={{ height: '100%' }} />
+          </Grid>
+          <Grid size={{ lg: 4, xs: 12 }}>
+            <Traffic 
+              chartSeries={data.categoryData} 
+              labels={data.categoryLabels} 
+              sx={{ height: '100%' }} 
+            />
+          </Grid>
+        </Grid>
+
+        {/* --- BOTTOM ROW: LOGISTICS LOGS --- */}
+        <Grid container spacing={3}>
+          <Grid size={{ lg: 4, md: 6, xs: 12 }}>
+            <LatestProducts 
+                products={data.recentProducts || []} // Use the correct key from your controller
+                sx={{ height: '100%' }} 
+            />
+          </Grid>
+          <Grid size={{ lg: 8, md: 6, xs: 12 }}>
+            <LatestOrders 
+              orders={data.recentTransactions || []} 
+              sx={{ height: '100%' }} 
+            />
+          </Grid>
+        </Grid>
+      </Stack>
+    </Box>
   );
 }

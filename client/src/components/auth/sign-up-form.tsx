@@ -4,23 +4,22 @@ import * as React from 'react';
 import NextLink from 'next/link';
 import { useRouter } from 'next/navigation';
 import { zodResolver } from '@hookform/resolvers/zod';
-import Alert from '@mui/material/Alert';
-import Button from '@mui/material/Button';
-import Checkbox from '@mui/material/Checkbox';
-import FormControl from '@mui/material/FormControl';
-import FormControlLabel from '@mui/material/FormControlLabel';
-import FormHelperText from '@mui/material/FormHelperText';
-import InputLabel from '@mui/material/InputLabel';
-import Link from '@mui/material/Link';
-import OutlinedInput from '@mui/material/OutlinedInput';
-import Stack from '@mui/material/Stack';
-import Typography from '@mui/material/Typography';
+import { 
+  Alert, Button, Checkbox, FormControl, FormControlLabel, 
+  FormHelperText, InputLabel, Link, OutlinedInput, Stack, 
+  Typography, InputAdornment, IconButton, Box, Avatar
+} from '@mui/material';
+import { 
+  UserCirclePlus, EnvelopeSimple, LockKey, 
+  Eye, EyeSlash, User 
+} from '@phosphor-icons/react';
 import { Controller, useForm } from 'react-hook-form';
 import { z as zod } from 'zod';
 
 import { paths } from '@/paths';
 import { authClient } from '@/lib/auth/client';
-import { useUser } from '@/hooks/use-user';
+import { useNotification } from '@/lib/notification'; // Import hook
+import { GlobalSnackbar } from '@/components/core/global-snackbar'; // Import component
 
 const schema = zod.object({
   firstName: zod.string().min(1, { message: 'First name is required' }),
@@ -31,134 +30,169 @@ const schema = zod.object({
 });
 
 type Values = zod.infer<typeof schema>;
-
 const defaultValues = { firstName: '', lastName: '', email: '', password: '', terms: false } satisfies Values;
 
 export function SignUpForm(): React.JSX.Element {
   const router = useRouter();
-
-  const { checkSession } = useUser();
-
+  const { notification, showNotification, hideNotification } = useNotification();
+  
   const [isPending, setIsPending] = React.useState<boolean>(false);
+  const [showPassword, setShowPassword] = React.useState<boolean>(false);
 
-  const {
-    control,
-    handleSubmit,
-    setError,
-    formState: { errors },
-  } = useForm<Values>({ defaultValues, resolver: zodResolver(schema) });
+  const { control, handleSubmit, setError, formState: { errors } } = useForm<Values>({ 
+    defaultValues, 
+    resolver: zodResolver(schema) 
+  });
 
   const onSubmit = React.useCallback(
     async (values: Values): Promise<void> => {
-        setIsPending(true);
+      setIsPending(true);
+      const { error } = await authClient.signUp(values);
 
-        const payload = {
-            firstName: values.firstName,
-            lastName: values.lastName,
-            email: values.email,
-            password: values.password
-        };
+      if (error) {
+        setError('root', { type: 'server', message: error });
+        setIsPending(false);
+        return;
+      }
 
-        const { error } = await authClient.signUp(payload);
+      // 1. Show success notification
+      showNotification("Account created! Redirecting to login...", "success");
 
-        if (error) {
-            setError('root', { type: 'server', message: error });
-            setIsPending(false);
-            return;
-        }
-
-        // 2. Explicitly redirect to the sign in page
+      // 2. Brief delay so the user sees the snackbar before the page changes
+      setTimeout(() => {
         router.push(paths.auth.signIn);
+      }, 1500);
     },
-        [router, setError]
-    );
+    [router, setError, showNotification]
+  );
 
   return (
-    <Stack spacing={3}>
-      <Stack spacing={1}>
-        <Typography variant="h4">Sign up</Typography>
+    <Stack spacing={4} sx={{ width: '100%', maxWidth: '400px' }}>
+      <Stack spacing={1} textAlign="center">
+        <Box sx={{ display: 'flex', justifyContent: 'center', mb: 1 }}>
+           <Avatar sx={{ bgcolor: 'primary.main', width: 56, height: 56 }}>
+              <UserCirclePlus size={32} weight="duotone" />
+           </Avatar>
+        </Box>
+        <Typography variant="h4" fontWeight="800">Create Account</Typography>
         <Typography color="text.secondary" variant="body2">
-          Already have an account?{' '}
-          <Link 
-                component={NextLink} 
-                href={paths.auth.signIn} 
-                underline="hover" 
-                variant="subtitle2"
-            >
-                Sign in
-        </Link>
+          Already a member?{' '}
+          <Link component={NextLink} href={paths.auth.signIn} underline="hover" variant="subtitle2" fontWeight="700">
+            Sign in
+          </Link>
         </Typography>
       </Stack>
+
       <form onSubmit={handleSubmit(onSubmit)}>
-        <Stack spacing={2}>
-          <Controller
-            control={control}
-            name="firstName"
-            render={({ field }) => (
-              <FormControl error={Boolean(errors.firstName)}>
-                <InputLabel>First name</InputLabel>
-                <OutlinedInput {...field} label="First name" />
-                {errors.firstName ? <FormHelperText>{errors.firstName.message}</FormHelperText> : null}
-              </FormControl>
-            )}
-          />
-          <Controller
-            control={control}
-            name="lastName"
-            render={({ field }) => (
-              <FormControl error={Boolean(errors.lastName)}>
-                <InputLabel>Last name</InputLabel>
-                <OutlinedInput {...field} label="Last name" />
-                {errors.lastName ? <FormHelperText>{errors.lastName.message}</FormHelperText> : null}
-              </FormControl>
-            )}
-          />
+        <Stack spacing={2.5}>
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+            <Controller
+              control={control}
+              name="firstName"
+              render={({ field }) => (
+                <FormControl error={Boolean(errors.firstName)} fullWidth>
+                  <InputLabel>First name</InputLabel>
+                  <OutlinedInput 
+                    {...field} 
+                    label="First name" 
+                    sx={{ borderRadius: 2.5 }}
+                    startAdornment={<InputAdornment position="start"><User size={20} /></InputAdornment>}
+                  />
+                  {errors.firstName && <FormHelperText>{errors.firstName.message}</FormHelperText>}
+                </FormControl>
+              )}
+            />
+            <Controller
+              control={control}
+              name="lastName"
+              render={({ field }) => (
+                <FormControl error={Boolean(errors.lastName)} fullWidth>
+                  <InputLabel>Last name</InputLabel>
+                  <OutlinedInput {...field} label="Last name" sx={{ borderRadius: 2.5 }} 
+                  startAdornment={<InputAdornment position="start"><User size={20} /></InputAdornment>}/>
+                  {errors.lastName && <FormHelperText>{errors.lastName.message}</FormHelperText>}
+                </FormControl>
+              )}
+            />
+          </Stack>
+
           <Controller
             control={control}
             name="email"
             render={({ field }) => (
               <FormControl error={Boolean(errors.email)}>
                 <InputLabel>Email address</InputLabel>
-                <OutlinedInput {...field} label="Email address" type="email" />
-                {errors.email ? <FormHelperText>{errors.email.message}</FormHelperText> : null}
+                <OutlinedInput 
+                  {...field} 
+                  label="Email address" 
+                  type="email" 
+                  sx={{ borderRadius: 2.5 }}
+                  startAdornment={<InputAdornment position="start"><EnvelopeSimple size={20} /></InputAdornment>}
+                />
+                {errors.email && <FormHelperText>{errors.email.message}</FormHelperText>}
               </FormControl>
             )}
           />
+
           <Controller
             control={control}
             name="password"
             render={({ field }) => (
               <FormControl error={Boolean(errors.password)}>
                 <InputLabel>Password</InputLabel>
-                <OutlinedInput {...field} label="Password" type="password" />
-                {errors.password ? <FormHelperText>{errors.password.message}</FormHelperText> : null}
+                <OutlinedInput 
+                  {...field} 
+                  label="Password" 
+                  type={showPassword ? 'text' : 'password'} 
+                  sx={{ borderRadius: 2.5 }}
+                  startAdornment={<InputAdornment position="start"><LockKey size={20} /></InputAdornment>}
+                  endAdornment={
+                    <InputAdornment position="end">
+                      <IconButton onClick={() => setShowPassword(!showPassword)} edge="end">
+                        {showPassword ? <EyeSlash size={20} /> : <Eye size={20} />}
+                      </IconButton>
+                    </InputAdornment>
+                  }
+                />
+                {errors.password && <FormHelperText>{errors.password.message}</FormHelperText>}
               </FormControl>
             )}
           />
+
           <Controller
             control={control}
             name="terms"
             render={({ field }) => (
-              <div>
+              <Box>
                 <FormControlLabel
-                  control={<Checkbox {...field} />}
+                  control={<Checkbox {...field} color="primary" />}
                   label={
-                    <React.Fragment>
-                      I have read the <Link>terms and conditions</Link>
-                    </React.Fragment>
+                    <Typography variant="body2" color="text.secondary">
+                      I agree to the <Link fontWeight="600" color="primary">Terms & Privacy Policy</Link>
+                    </Typography>
                   }
                 />
-                {errors.terms ? <FormHelperText error>{errors.terms.message}</FormHelperText> : null}
-              </div>
+                {errors.terms && <FormHelperText error sx={{ ml: 1 }}>{errors.terms.message}</FormHelperText>}
+              </Box>
             )}
           />
-          {errors.root ? <Alert color="error">{errors.root.message}</Alert> : null}
-          <Button disabled={isPending} type="submit" variant="contained">
-            Sign up
+
+          {errors.root && <Alert severity="error" variant="filled" sx={{ borderRadius: 2 }}>{errors.root.message}</Alert>}
+
+          <Button 
+            disabled={isPending} 
+            type="submit" 
+            variant="contained" 
+            size="large"
+            sx={{ borderRadius: 2.5, py: 1.5, fontWeight: 700, textTransform: 'none', fontSize: '1rem' }}
+          >
+            {isPending ? 'Processing...' : 'Sign Up'}
           </Button>
         </Stack>
       </form>
-      {/* <Alert color="warning">Created users are not persisted</Alert> */}
+
+      {/* Render the snackbar at the bottom of the component */}
+      <GlobalSnackbar state={notification} onClose={hideNotification} />
     </Stack>
   );
 }

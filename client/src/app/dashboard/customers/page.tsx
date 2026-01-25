@@ -55,7 +55,7 @@ export default function CustomersPage() {
               <TableCell sx={{ fontWeight: 'bold' }}>Business Name</TableCell>
               <TableCell sx={{ fontWeight: 'bold' }}>Contact Info</TableCell>
               <TableCell sx={{ fontWeight: 'bold' }}>Phone</TableCell>
-              <TableCell sx={{ fontWeight: 'bold' }}>Sydney Address</TableCell>
+              <TableCell sx={{ fontWeight: 'bold' }}>Address</TableCell>
               <TableCell align="right" sx={{ fontWeight: 'bold' }}>Actions</TableCell>
             </TableRow>
           </TableHead>
