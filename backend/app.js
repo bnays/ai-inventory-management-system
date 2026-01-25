@@ -13,6 +13,7 @@ const saleController = require('./controllers/saleController');
 const customerController = require('./controllers/customerController');
 const dashboardController = require('./controllers/dashboardController');
 const notificationController = require('./controllers/notificationController');
+const forecastController = require('./controllers/forecastController');
 // Use process.env.PORT for the server port (typically 5000)
 const csvtodbController = require('./controllers/csvtodbController');// Use process.env.PORT for the server port (typically 5000)
 const port = process.env.PORT || 5000;
@@ -37,6 +38,8 @@ app.post('/api/auth/login', authRoutes.login);
 
 // New route for fetching current user profile
 app.get('/api/auth/me', protect(['admin', 'user']), authRoutes.getMe);
+
+app.post('/api/auth/update-password', protect(['admin', 'user']), authRoutes.updatePassword);
 
 // --- Protected Route Example ---
 // This follows your RBAC requirements for Admin and Staff
@@ -135,12 +138,33 @@ app.get('/api/sales/:id', protect(['admin', 'user']), saleController.getSaleById
 
 // --- User Management Routes ---
 // Only Admins can delete see all the users list
+// --- User Management Routes ---
+
+// Admins can see the full staff directory
 app.get('/api/users',
     protect(['admin']),
     userController.getAllUsers
 );
 
-app.patch('/api/users/profile', protect(['admin', 'user']), userController.updateUserProfile);
+// New: Admin can register a staff member directly
+app.post('/api/users',
+    protect(['admin']),
+    userController.createUser
+);
+
+// New: Admin can update any staff profile (Role/Name/Password)
+app.patch('/api/users/:id',
+    protect(['admin']),
+    userController.updateUserAdmin
+);
+
+// New: Admin can remove staff from the hub
+app.delete('/api/users/:id',
+    protect(['admin']),
+    userController.deleteUser
+);
+
+app.patch('/api/users/profile', protect(['admin', 'user']), userController.updateProfile);
 
 // --- Customer Routes ---
 // Staff and Admins can view the customer list
@@ -188,6 +212,10 @@ app.post(
     protect(['admin']),
     csvtodbController.importProducts
 );
+
+// 1. Specific Forecast Route
+// This endpoint triggers the Python child process for a specific SKU
+app.get('/api/inventory/forecast/:sku', forecastController.getProductForecast);
 
 app.listen(port, () => {
     console.log(`Logix Backend listening on port ${port}`);

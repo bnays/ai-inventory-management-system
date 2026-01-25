@@ -108,3 +108,41 @@ exports.getMe = async (req, res) => {
         res.status(500).json({ message: "Error fetching user data", error: error.message });
     }
 };
+
+/**
+ * UPDATE USER PASSWORD
+ * Securely hashes new credentials and updates the Sydney Hub user record.
+ */
+exports.updatePassword = async (req, res) => {
+    const { password } = req.body;
+
+    try {
+        // 1. Validate Input (Basic length check as a fail-safe)
+        if (!password || password.length < 6) {
+            return res.status(400).json({ message: "Security requirement: Password must be at least 6 characters." });
+        }
+
+        // 2. Hash the new password with a cost factor of 10
+        const salt = await bcrypt.genSalt(10);
+        const hashedPassword = await bcrypt.hash(password, salt);
+
+        // 3. Update database (req.user.id provided by your auth middleware)
+        const sql = 'UPDATE users SET password_hash = ? WHERE user_id = ?';
+        const [result] = await db.execute(sql, [hashedPassword, req.user.id]);
+
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ message: "Update failed: User record not found." });
+        }
+
+        res.status(200).json({
+            message: "Credential synchronization complete. Your password has been updated."
+        });
+
+    } catch (error) {
+        console.error("Password Update Error:", error.message);
+        res.status(500).json({
+            message: "Internal security failure during password update.",
+            error: error.message
+        });
+    }
+};

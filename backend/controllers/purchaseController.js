@@ -77,30 +77,42 @@ exports.getPurchaseById = async (req, res) => {
  * CREATE PURCHASE ORDER
  */
 exports.createPurchaseOrder = async (req, res) => {
-    const { supplier_id, items, tax, shipping_fee } = req.body;
+    // total_amount here is the frontend-calculated (Subtotal + GST)
+    const { supplier_id, items, tax, total_amount, shipping_fee } = req.body;
     const connection = await db.getConnection();
 
     try {
         await connection.beginTransaction();
 
-        const total_amount = items.reduce((sum, item) => sum + (item.quantity * item.cost_price), 0);
-
+        // Use the total_amount passed from the frontend (which includes GST)
+        // rather than re-calculating just the subtotal here.
         const orderSql = `
             INSERT INTO purchase_orders (supplier_id, total_amount, tax, shipping_fee, status) 
             VALUES (?, ?, ?, ?, 'Pending')
         `;
-        const [orderResult] = await connection.execute(orderSql, [supplier_id, total_amount, tax || 0, shipping_fee || 0]);
+        const [orderResult] = await connection.execute(orderSql, [
+            supplier_id,
+            total_amount,
+            tax || 0,
+            shipping_fee || 0
+        ]);
+
         const purchaseId = orderResult.insertId;
 
-        const itemSql = `INSERT INTO purchase_order_items (purchase_id, product_id, quantity, cost_price) VALUES (?, ?, ?, ?)`;
+        const itemSql = `
+            INSERT INTO purchase_order_items (purchase_id, product_id, quantity, cost_price) 
+            VALUES (?, ?, ?, ?)
+        `;
+
         for (const item of items) {
             await connection.execute(itemSql, [purchaseId, item.product_id, item.quantity, item.cost_price]);
         }
 
         await connection.commit();
-        res.status(201).json({ message: "Purchase order created", purchaseId });
+        res.status(201).json({ message: "Purchase order created with GST calculation", purchaseId });
     } catch (error) {
         await connection.rollback();
+        console.error("PO Creation Error:", error.message);
         res.status(500).json({ message: "Failed to create order", error: error.message });
     } finally {
         connection.release();
@@ -183,25 +195,37 @@ exports.generateQuickPurchase = async (req, res) => {
     try {
         await connection.beginTransaction();
 
-        const total_amount = items.reduce((sum, item) => sum + (item.quantity * item.cost_price), 0);
+        // 1. Calculate Financials
+        const subtotal = items.reduce((sum, item) => sum + (item.quantity * item.cost_price), 0);
+        const tax = subtotal * 0.10; // 10% GST
+        const total_amount = subtotal + tax;
 
+        // 2. Create Order Header
         const [orderResult] = await connection.execute(
-            `INSERT INTO purchase_orders (supplier_id, total_amount, status) VALUES (?, ?, 'Pending')`,
-            [supplier_id, total_amount]
+            `INSERT INTO purchase_orders (supplier_id, total_amount, tax, status) 
+             VALUES (?, ?, ?, 'Pending')`,
+            [supplier_id, total_amount, tax]
         );
         const purchaseId = orderResult.insertId;
 
+        // 3. Create Order Items
         const itemSql = `INSERT INTO purchase_order_items (purchase_id, product_id, quantity, cost_price) VALUES (?, ?, ?, ?)`;
         for (const item of items) {
             await connection.execute(itemSql, [purchaseId, item.product_id, item.quantity, item.cost_price]);
         }
 
         await connection.commit();
-        res.status(201).json({ success: true, message: "Purchase order generated successfully", purchaseId });
+        res.status(201).json({
+            success: true,
+            message: "Automated Purchase Order generated with GST",
+            purchaseId,
+            financials: { subtotal, tax, total_amount }
+        });
 
     } catch (error) {
         await connection.rollback();
-        res.status(500).json({ success: false, message: "Failed to generate order" });
+        console.error("Quick Purchase Error:", error.message);
+        res.status(500).json({ success: false, message: "Failed to generate automated order" });
     } finally {
         connection.release();
     }

@@ -49,7 +49,6 @@ exports.createSaleOrder = async (req, res) => {
             );
 
             // C. LOG STOCK TRANSACTION (Outflow)
-            // Essential for the Sydney hub audit trail
             await connection.execute(
                 `INSERT INTO stock_transactions 
                  (product_id, user_id, transaction_type, quantity_changed, reference_id, reason) 
@@ -57,7 +56,7 @@ exports.createSaleOrder = async (req, res) => {
                 [
                     item.product_id,
                     user_id || 1,
-                    -item.quantity, // Negative represents stock leaving the warehouse
+                    -item.quantity,
                     orderId,
                     `Sale Order #${orderId}`
                 ]
@@ -65,7 +64,7 @@ exports.createSaleOrder = async (req, res) => {
 
             // D. Post-deduction check for Low Stock Notification
             const [stockData] = await connection.execute(
-                `SELECT p.product_name, i.quantity_on_hand, p.reorder_level 
+                `SELECT p.product_name, p.sku, i.quantity_on_hand, p.reorder_level 
                  FROM inventory i 
                  JOIN products p ON i.product_id = p.product_id 
                  WHERE i.product_id = ?`,
@@ -76,19 +75,27 @@ exports.createSaleOrder = async (req, res) => {
             if (product.quantity_on_hand <= product.reorder_level) {
                 await connection.execute(
                     'INSERT INTO notifications (type, message, product_id) VALUES (?, ?, ?)',
-                    ['Low Stock', `Urgent: ${product.product_name} is now at ${product.quantity_on_hand} units in Sydney Hub.`, item.product_id]
+                    ['Low Stock', `Urgent: ${product.product_name} is now at ${product.quantity_on_hand} units.`, item.product_id]
                 );
             }
+
+            // E. SYNC WITH AI FORECASTING ENGINE
+            // We use the SKU to keep the sales_history table consistent for the Python script
+            await connection.execute(
+                `INSERT INTO sales_history (product_sku, quantity_sold, sale_date) 
+                 VALUES (?, ?, ?)`,
+                [product.sku, item.quantity, new Date()]
+            );
         }
 
         await connection.commit();
-        res.status(201).json({ message: "Sale completed, stock updated, and transaction logged", orderId });
+        res.status(201).json({ message: "Sale completed and AI history synced", orderId });
 
     } catch (error) {
         await connection.rollback();
         res.status(400).json({ message: "Transaction failed", error: error.message });
     } finally {
-        connection.release();
+        connection.release(); // Crucial for connection pool health
     }
 };
 
@@ -98,6 +105,15 @@ exports.createSaleOrder = async (req, res) => {
  */
 exports.getAllSales = async (req, res) => {
     try {
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 10;
+        const offset = (page - 1) * limit;
+
+        // 1. Get total count for the frontend pagination component
+        const [countResult] = await db.execute('SELECT COUNT(*) as total FROM sale_orders');
+        const totalItems = countResult[0].total;
+
+        // 2. Fetch the specific slice of data with Customer and User details
         const query = `
             SELECT 
                 so.*, 
@@ -107,11 +123,23 @@ exports.getAllSales = async (req, res) => {
             FROM sale_orders so
             LEFT JOIN customers c ON so.customer_id = c.customer_id
             LEFT JOIN users u ON so.user_id = u.user_id
-            ORDER BY so.created_at DESC;
+            ORDER BY so.created_at DESC
+            LIMIT ? OFFSET ?;
         `;
-        const [rows] = await db.execute(query);
-        res.status(200).json(rows);
+
+        // Note: LIMIT and OFFSET values must be passed as strings for some database drivers
+        const [rows] = await db.execute(query, [String(limit), String(offset)]);
+
+        res.status(200).json({
+            data: rows,
+            meta: {
+                totalItems,
+                totalPages: Math.ceil(totalItems / limit),
+                currentPage: page
+            }
+        });
     } catch (error) {
+        console.error("Fetch Sales Error:", error.message);
         res.status(500).json({ message: "Error fetching sales", error: error.message });
     }
 };
