@@ -85,6 +85,14 @@ npx next dev
 #### Historical Data Migration
 To sync your historical CSV datasets with the live MySQL environment for AI training, run the migration script:
 
+
+For historical data generation
+```
+cd ai-module
+python historical_data_generation.py
+```
+
+For migrating the generated data to mysql db sales_history table.
 ```
 cd backend
 node scripts/migrate-history.js
