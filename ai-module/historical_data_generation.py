@@ -19,7 +19,7 @@ products = [
 ]
 
 # Timeframe: Last 3 Years (Ending Today)
-end_date = datetime(2026, 1, 25)
+end_date = datetime.now()
 start_date = end_date - timedelta(days=3*365)
 date_range = pd.date_range(start=start_date, end=end_date)
 
