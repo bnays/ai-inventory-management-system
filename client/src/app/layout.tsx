@@ -17,10 +17,35 @@ import { CustomerProvider } from '@/contexts/customer-context';
 export const metadata: Metadata = {
   title: 'Logix Warehouse Management System',
   description: 'AI-driven inventory forecasting and warehouse management system.',
+  metadataBase: new URL('https://ai-inventory-management-system.vercel.app'), // Required for absolute image paths
   icons: {
-    icon: '/assets/favicon/favicon.ico', 
+    icon: '/assets/favicon/favicon.ico',
     shortcut: '/assets/favicon/favicon-16x16.png',
     apple: '/assets/favicon/apple-touch-icon.png',
+  },
+  // 1. Open Graph for WhatsApp, Facebook, LinkedIn
+  openGraph: {
+    title: 'Logix Warehouse Management System',
+    description: 'AI-driven inventory forecasting and predictive demand analysis.',
+    url: 'https://ai-inventory-management-system.vercel.app',
+    siteName: 'Logix Warehouse Management System',
+    images: [
+      {
+        url: '/assets/logix-transparent.png',
+        width: 1200,
+        height: 630,
+        alt: 'Logix Warehouse System Dashboard',
+      },
+    ],
+    locale: 'en_AU',
+    type: 'website',
+  },
+  // 2. Twitter Cards
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Logix Warehouse Management System',
+    description: 'Real-time stock optimization for the Warehouse.',
+    images: ['/assets/logix-dark.png'],
   },
 };
 
