@@ -35,6 +35,9 @@ export default function ProductForecastDetail() {
 
   React.useEffect(() => {
     const fetchForecast = async () => {
+        setLoading(true); 
+        setData(null);
+        setError(null);
       try {
         const result = await apiRequest(`/inventory/forecast/${sku}`);
         setData(result);

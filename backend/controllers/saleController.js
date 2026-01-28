@@ -12,9 +12,30 @@ exports.createSaleOrder = async (req, res) => {
     try {
         await connection.beginTransaction();
 
-        // 1. Calculate total and Insert Header
-        const total_amount = items.reduce((sum, item) => sum + (item.quantity * item.unit_price), 0);
+        // 1. Fetch Verified Prices from Database to ensure Profit Margin
+        let calculated_total = 0;
+        const verifiedItems = [];
 
+        for (const item of items) {
+            const [productData] = await connection.execute(
+                'SELECT unit_price, product_name, sku FROM products WHERE product_id = ?',
+                [item.product_id]
+            );
+
+            if (productData.length === 0) throw new Error(`Product ID ${item.product_id} not found.`);
+
+            const retailPrice = Number(productData[0].unit_price);
+            calculated_total += (item.quantity * retailPrice);
+
+            verifiedItems.push({
+                ...item,
+                retailPrice,
+                product_name: productData[0].product_name,
+                sku: productData[0].sku
+            });
+        }
+
+        // 2. Insert Header with Server-Calculated Total
         const orderSql = `
             INSERT INTO sale_orders (user_id, customer_id, total_amount, tax, discount, shipping_cost, status, payment_method) 
             VALUES (?, ?, ?, ?, ?, ?, 'Completed', ?)
@@ -22,7 +43,7 @@ exports.createSaleOrder = async (req, res) => {
         const [orderResult] = await connection.execute(orderSql, [
             user_id || 1,
             customer_id,
-            total_amount,
+            calculated_total,
             tax || 0,
             discount || 0,
             shipping_cost || 0,
@@ -30,8 +51,8 @@ exports.createSaleOrder = async (req, res) => {
         ]);
         const orderId = orderResult.insertId;
 
-        // 2. Process each item
-        for (const item of items) {
+        // 3. Process each item (Inventory, Line Items, Transactions, AI Sync)
+        for (const item of verifiedItems) {
             // A. Update inventory with strict stock check
             const [updateResult] = await connection.execute(
                 'UPDATE inventory SET quantity_on_hand = quantity_on_hand - ? WHERE product_id = ? AND quantity_on_hand >= ?',
@@ -39,63 +60,53 @@ exports.createSaleOrder = async (req, res) => {
             );
 
             if (updateResult.affectedRows === 0) {
-                throw new Error(`Insufficient stock for product ID: ${item.product_id}`);
+                throw new Error(`Insufficient stock for: ${item.product_name}`);
             }
 
-            // B. Insert Line Item
+            // B. Insert Line Item using the Verified Retail Price
             await connection.execute(
                 'INSERT INTO sale_order_items (order_id, product_id, quantity, unit_price) VALUES (?, ?, ?, ?)',
-                [orderId, item.product_id, item.quantity, item.unit_price]
+                [orderId, item.product_id, item.quantity, item.retailPrice]
             );
 
-            // C. LOG STOCK TRANSACTION (Outflow)
+            // C. Log Stock Transaction (Outflow)
             await connection.execute(
                 `INSERT INTO stock_transactions 
                  (product_id, user_id, transaction_type, quantity_changed, reference_id, reason) 
                  VALUES (?, ?, 'Outflow', ?, ?, ?)`,
-                [
-                    item.product_id,
-                    user_id || 1,
-                    -item.quantity,
-                    orderId,
-                    `Sale Order #${orderId}`
-                ]
+                [item.product_id, user_id || 1, -item.quantity, orderId, `Sale Order #${orderId}`]
             );
 
-            // D. Post-deduction check for Low Stock Notification
-            const [stockData] = await connection.execute(
-                `SELECT p.product_name, p.sku, i.quantity_on_hand, p.reorder_level 
-                 FROM inventory i 
-                 JOIN products p ON i.product_id = p.product_id 
-                 WHERE i.product_id = ?`,
-                [item.product_id]
-            );
-
-            const product = stockData[0];
-            if (product.quantity_on_hand <= product.reorder_level) {
-                await connection.execute(
-                    'INSERT INTO notifications (type, message, product_id) VALUES (?, ?, ?)',
-                    ['Low Stock', `Urgent: ${product.product_name} is now at ${product.quantity_on_hand} units.`, item.product_id]
-                );
-            }
-
-            // E. SYNC WITH AI FORECASTING ENGINE
-            // We use the SKU to keep the sales_history table consistent for the Python script
+            // D. Sync with AI Forecasting Engine (Correct Date Format)
+            const today = new Date().toISOString().split('T')[0];
             await connection.execute(
                 `INSERT INTO sales_history (product_sku, quantity_sold, sale_date) 
                  VALUES (?, ?, ?)`,
-                [product.sku, item.quantity, new Date()]
+                [item.sku, item.quantity, today]
             );
+
+            // E. Post-deduction check for Low Stock Notification
+            const [invCheck] = await connection.execute(
+                'SELECT i.quantity_on_hand, p.reorder_level FROM inventory i JOIN products p ON i.product_id = p.product_id WHERE i.product_id = ?',
+                [item.product_id]
+            );
+
+            if (invCheck[0].quantity_on_hand <= invCheck[0].reorder_level) {
+                await connection.execute(
+                    'INSERT INTO notifications (type, message, product_id) VALUES (?, ?, ?)',
+                    ['Low Stock', `Urgent: ${item.product_name} is now at ${invCheck[0].quantity_on_hand} units.`, item.product_id]
+                );
+            }
         }
 
         await connection.commit();
-        res.status(201).json({ message: "Sale completed and AI history synced", orderId });
+        res.status(201).json({ success: true, message: "Sale completed and profit-synced", orderId });
 
     } catch (error) {
-        await connection.rollback();
-        res.status(400).json({ message: "Transaction failed", error: error.message });
+        if (connection) await connection.rollback();
+        res.status(400).json({ success: false, message: error.message });
     } finally {
-        connection.release(); // Crucial for connection pool health
+        if (connection) connection.release();
     }
 };
 

@@ -15,15 +15,15 @@ load_dotenv()
 def run_forecast(sku_input):
     db = None
     try:
-        # 1. Database Connection using Environment Variables
+        # 1. Database Connection
         db = mysql.connector.connect(
             host=os.getenv('DB_HOST', 'localhost'),
             user=os.getenv('DB_USER', 'root'),
-            password=os.getenv('DB_PASS', ''), # Matches the key in your .env
+            password=os.getenv('DB_PASS', ''), 
             database=os.getenv('DB_NAME', 'ai_inventory_system')
         )
 
-        # 2. Fetch Historical Data from MySQL
+        # 2. Fetch Historical Data
         query = """
             SELECT sale_date as date, quantity_sold 
             FROM sales_history 
@@ -35,7 +35,7 @@ def run_forecast(sku_input):
         if data.empty:
             return {"error": f"No historical data found for SKU: {sku_input}"}
 
-        # 3. Data Cleaning and Preparation
+        # 3. Data Preparation
         data['date'] = pd.to_datetime(data['date'])
         
         # 4. Feature Engineering: Lags and Rolling Averages
@@ -46,21 +46,37 @@ def run_forecast(sku_input):
         X = data[['lag1', 'lag2', 'roll3']]
         y = data['quantity_sold']
 
-        # 5. Train Random Forest Model
+        # 5. Train Random Forest Model (Fixed Seed for consistency)
         model = RandomForestRegressor(n_estimators=100, random_state=42)
         model.fit(X, y)
         accuracy = r2_score(y, model.predict(X))
 
-        # 6. Forecast Simulation (Next 365 Days)
+        # 6. Deterministic Forecast Simulation (Next 365 Days)
+        # We use recursive forecasting: Today's prediction becomes tomorrow's lag
         today = datetime.now()
         future_dates = pd.date_range(start=today, periods=365)
         
-        # Predictive simulation based on model constraints
-        predicted_values = np.random.uniform(y.min(), y.max() + 5, len(future_dates))
-        
+        forecast_results = []
+        # Start with the very last known record from your database
+        current_features = X.iloc[-1].values.reshape(1, -1) 
+
+        for _ in range(365):
+            # Predict using the trained AI model
+            prediction = model.predict(current_features)[0]
+            forecast_results.append(prediction)
+            
+            # Update Features for the next day:
+            # new_lag1 = current prediction
+            # new_lag2 = previous lag1
+            # new_roll3 = average of the new window
+            new_lag1 = prediction
+            new_lag2 = current_features[0][0]
+            new_roll = (new_lag1 + new_lag2 + current_features[0][1]) / 3
+            current_features = np.array([[new_lag1, new_lag2, new_roll]])
+
         forecast_df = pd.DataFrame({
             "date": future_dates,
-            "predicted_sales": predicted_values.round().astype(int)
+            "predicted_sales": np.array(forecast_results).round().astype(int)
         }).set_index("date")
 
         # 7. Aggregate Projections for Dashboard
@@ -90,10 +106,9 @@ def run_forecast(sku_input):
         return {"error": str(e)}
     finally:
         if db and db.is_connected():
-            db.close() # Ensure database connection is terminated
+            db.close()
 
 if __name__ == "__main__":
-    # Script expects SKU as the first argument from Node.js
     sku_arg = sys.argv[1] if len(sys.argv) > 1 else ""
     result = run_forecast(sku_arg)
-    print(json.dumps(result)) # Output JSON for Node.js child_process capture
+    print(json.dumps(result))

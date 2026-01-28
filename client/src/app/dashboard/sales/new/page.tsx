@@ -1,17 +1,16 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Box, Typography, Button, TextField, Paper, Stack, IconButton,
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow, MenuItem,
   CircularProgress, Dialog, DialogTitle, DialogContent, 
-  DialogContentText, DialogActions, Divider, useTheme, Avatar
+  DialogContentText, DialogActions, Divider, useTheme
 } from '@mui/material';
 import { 
   Plus as PlusIcon, 
   Trash as TrashIcon, 
   CaretLeft as CaretLeftIcon,
-  Tag,
   CurrencyCircleDollar,
   HandCoins
 } from '@phosphor-icons/react';
@@ -49,11 +48,18 @@ export default function CreateSalePage() {
     const fetchData = async () => {
       try {
         const [prodRes, custRes] = await Promise.all([
-          apiRequest('/inventory'),
+          apiRequest('/inventory?limit=1000'),
           apiRequest('/customers')
         ]);
-        setProducts(prodRes.data || prodRes || []);
-        setCustomers(custRes.data || custRes || []);
+
+        // FIX: Handle both direct arrays and { data: [] } wrappers
+        const productList = prodRes.data || (Array.isArray(prodRes) ? prodRes : []);
+        const customerList = custRes.data || (Array.isArray(custRes) ? custRes : []);
+
+        setProducts(productList);
+        setCustomers(customerList);
+        
+        console.log("Setup Data Loaded:", { products: productList.length, customers: customerList.length });
       } catch (error) {
         showNotification("Failed to load outbound setup data", "error");
       } finally {
@@ -70,7 +76,8 @@ export default function CreateSalePage() {
     if (field === 'product_id') {
       const selectedProd = products.find(p => p.product_id === Number(value));
       if (selectedProd) {
-        item.unit_price = selectedProd.unit_price || 0;
+        // Logic: Pulling the RETAIL PRICE (Cost + Profit) from the updated DB
+        item.unit_price = Number(selectedProd.unit_price) || 0;
         item.stock_available = selectedProd.quantity_on_hand || 0;
       }
     }
@@ -78,7 +85,7 @@ export default function CreateSalePage() {
     setItems(newItems);
   };
 
-  const totals = React.useMemo(() => {
+  const totals = useMemo(() => {
     const subtotal = items.reduce((sum, item) => sum + (item.quantity * item.unit_price), 0);
     const discount = items.reduce((sum, item) => (sum + (item.quantity * item.unit_price * (item.discount_percent / 100))), 0);
     const taxable = subtotal - discount;
@@ -89,6 +96,8 @@ export default function CreateSalePage() {
   const handleOpenDialog = (e: React.FormEvent) => {
     e.preventDefault();
     setTouched(true);
+    
+    // Validation Logic
     if (items.some(item => item.product_id !== 0 && item.quantity > item.stock_available)) {
         return showNotification("Inventory Check Failed: Requested quantity exceeds warehouse stock.", "error");
     }
@@ -113,7 +122,7 @@ export default function CreateSalePage() {
           items 
         })
       });
-      showNotification("Outbound sale finalized and stock adjusted.", "success");
+      showNotification("Outbound sale finalized at RETAIL price.", "success");
       router.push('/dashboard/sales');
     } catch (error: any) {
       showNotification(error.message || "Fulfillment Error: Transaction failed", "error");
@@ -127,7 +136,7 @@ export default function CreateSalePage() {
   return (
     <Box sx={{ p: { xs: 2, md: 4 }, bgcolor: '#f9fafb', minHeight: '100vh' }}>
       
-      {/* --- PAGE HEADER --- */}
+      {/* PAGE HEADER */}
       <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 4 }}>
         <IconButton onClick={() => router.push('/dashboard/sales')} sx={{ bgcolor: 'white', border: '1px solid #eaecf0', borderRadius: 2 }}>
             <CaretLeftIcon size={20} weight="bold" />
@@ -177,7 +186,17 @@ export default function CreateSalePage() {
                 return (
                   <TableRow key={index} sx={{ '&:last-child td, &:last-child th': { border: 0 } }}>
                     <TableCell>
-                      <TextField select fullWidth size="small" value={item.product_id || ''} onChange={(e) => updateItem(index, 'product_id', Number(e.target.value))}>
+                      <TextField select fullWidth size="small" value={item.product_id || ''} 
+                      onChange={(e) => updateItem(index, 'product_id', Number(e.target.value))}
+                      SelectProps={{
+                            MenuProps: {
+                            PaperProps: {
+                                style: {
+                                    maxHeight: 300, // Limits height to 300px
+                                },
+                            }},
+                        }}
+                      >
                         {products.map((p) => (
                             <MenuItem key={p.product_id} value={p.product_id}>
                                 <Stack direction="row" justifyContent="space-between" sx={{ width: '100%' }}>
@@ -232,13 +251,19 @@ export default function CreateSalePage() {
 
       <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 2, mt: 3, pb: 4 }}>
         <Button variant="outlined" onClick={() => router.push('/dashboard/sales')} sx={{ borderRadius: 2.5, px: 4, bgcolor: 'white' }}>Discard Order</Button>
-        <Button variant="contained" onClick={handleOpenDialog} size="large" sx={{ borderRadius: 2.5, px: 4, fontWeight: 700 }}>Create Sale Order</Button>
+        <Button variant="contained" onClick={handleOpenDialog} size="large" sx={{ borderRadius: 2.5, px: 4, fontWeight: 700 }} disabled={isSubmitting}>
+          {isSubmitting ? 'Processing...' : 'Create Sale Order'}
+        </Button>
       </Box>
 
+      {/* Confirmation Dialog */}
       <Dialog open={openConfirm} onClose={() => setOpenConfirm(false)} PaperProps={{ sx: { borderRadius: 4, p: 1 } }}>
         <DialogTitle sx={{ fontWeight: 800 }}>Verify Sale Completion</DialogTitle>
-        <DialogContent><DialogContentText variant="body2">Commit outbound order for <strong>{customers.find(c => c.customer_id === customerId)?.name}</strong> for a total of <strong>${totals.grandTotal.toFixed(2)}</strong>? Stock levels will be deducted immediately.</DialogContentText></DialogContent>
-        <DialogActions sx={{ pb: 2, px: 3 }}><Button onClick={() => setOpenConfirm(false)}>Review Order</Button><Button onClick={handleFinalSubmit} variant="contained" color="primary" sx={{ borderRadius: 2, fontWeight: 700 }}>Commit & Invoice</Button></DialogActions>
+        <DialogContent><DialogContentText variant="body2">Commit outbound order for <strong>{customers.find(c => Number(c.customer_id) === Number(customerId))?.name}</strong> for a total of <strong>${totals.grandTotal.toFixed(2)}</strong>? Stock levels will be deducted immediately.</DialogContentText></DialogContent>
+        <DialogActions sx={{ pb: 2, px: 3 }}>
+          <Button onClick={() => setOpenConfirm(false)}>Review Order</Button>
+          <Button onClick={handleFinalSubmit} variant="contained" color="primary" sx={{ borderRadius: 2, fontWeight: 700 }}>Commit & Invoice</Button>
+        </DialogActions>
       </Dialog>
       <GlobalSnackbar state={notification} onClose={hideNotification} />
     </Box>

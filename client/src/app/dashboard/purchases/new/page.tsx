@@ -10,9 +10,7 @@ import {
   Plus as PlusIcon,
   Trash as TrashIcon,
   CaretLeft as CaretLeftIcon,
-  ShoppingCartSimple,
-  CurrencyDollar,
-  WarningCircle
+  CurrencyDollar
 } from '@phosphor-icons/react';
 
 import { useRouter } from 'next/navigation';
@@ -31,8 +29,6 @@ export default function CreatePurchaseOrder() {
   const theme = useTheme();
   const router = useRouter();
   const { createPurchase } = usePurchases();
-  
-  // Notification System
   const { notification, showNotification, hideNotification } = useNotification();
   
   const [suppliers, setSuppliers] = useState<any[]>([]);
@@ -46,10 +42,17 @@ export default function CreatePurchaseOrder() {
       try {
         const [suppRes, prodRes] = await Promise.all([
           apiRequest('/suppliers'),
-          apiRequest('/inventory')
+          apiRequest('/inventory?limit=1000')
         ]);
-        setSuppliers(suppRes.data || suppRes || []);
-        setProducts(prodRes.data || prodRes || []);
+        
+        // FIX: Handle both direct arrays and wrapped { data: [...] } objects
+        const supplierList = suppRes.data || (Array.isArray(suppRes) ? suppRes : []);
+        const productList = prodRes.data || (Array.isArray(prodRes) ? prodRes : []);
+        
+        setSuppliers(supplierList);
+        setProducts(productList);
+        
+        console.log("Purchase Setup Data:", { suppliers: supplierList.length, products: productList.length });
       } catch (error) {
         showNotification("Critical: System failed to load catalog data.", "error");
       }
@@ -57,10 +60,9 @@ export default function CreatePurchaseOrder() {
     loadData();
   }, [showNotification]);
 
-  // --- GST & FINANCIAL CALCULATIONS ---
   const totals = useMemo(() => {
     const subtotal = items.reduce((acc, item) => acc + (item.quantity * item.cost_price), 0);
-    const gst = subtotal * 0.10; // 10% Australian GST
+    const gst = subtotal * 0.10; 
     return { subtotal, gst, grandTotal: subtotal + gst };
   }, [items]);
 
@@ -68,10 +70,14 @@ export default function CreatePurchaseOrder() {
     const newItems = [...items];
     if (field === 'product_id') {
       const selectedProd = products.find(p => p.product_id === value);
+      
+      // LOGIC FIX: Pulling COST (Retail / 1.4) to ensure purchase is below sale price
+      const costPrice = selectedProd ? (Number(selectedProd.unit_price) / 1.4) : 0;
+      
       newItems[index] = { 
         ...newItems[index], 
         product_id: value,
-        cost_price: selectedProd ? Number(selectedProd.unit_price) : 0 
+        cost_price: Number(costPrice.toFixed(2)) 
       };
     } else {
       newItems[index] = { ...newItems[index], [field]: value };
@@ -85,7 +91,6 @@ export default function CreatePurchaseOrder() {
     if (items.length > 1) setItems(items.filter((_, i) => i !== index));
   };
 
-  // --- VALIDATION & SUBMISSION ---
   const validateForm = () => {
     if (!supplierId) {
       showNotification("Validation Error: Please select a Supplier.", "error");
@@ -118,6 +123,7 @@ export default function CreatePurchaseOrder() {
         tax: totals.gst,
         total_amount: totals.grandTotal 
       });
+      showNotification("Success: Purchase order created at cost basis.", "success");
       setTimeout(() => router.push('/dashboard/purchases'), 1500);
     } catch (error: any) {
       showNotification(error.message || "Database Error: Could not save order.", "error");
@@ -128,14 +134,13 @@ export default function CreatePurchaseOrder() {
 
   return (
     <Box sx={{ p: { xs: 2, md: 4 }, minHeight: '100vh' }}>
-      
-      {/* Header */}
       <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 4 }}>
         <IconButton onClick={() => router.push('/dashboard/purchases')} sx={{ bgcolor: 'white', border: '1px solid #eaecf0', borderRadius: 2 }}>
           <CaretLeftIcon size={20} weight="bold" />
         </IconButton>
         <Box>
           <Typography variant="h4" fontWeight="800" sx={{ letterSpacing: '-0.02em' }}>Create New Purchase Order</Typography>
+          <Typography variant="body2" color="text.secondary">Procure inventory at cost from partners</Typography>
         </Box>
       </Stack>
 
@@ -154,14 +159,14 @@ export default function CreatePurchaseOrder() {
 
         <Divider sx={{ mb: 4 }} />
 
-        <Typography variant="subtitle1" fontWeight="700" sx={{ mb: 2 }}>2. Line Items (Taxable)</Typography>
+        <Typography variant="subtitle1" fontWeight="700" sx={{ mb: 2 }}>2. Line Items (Cost Basis)</Typography>
         <TableContainer sx={{ border: '1px solid #eaecf0', borderRadius: 4, mb: 2 }}>
           <Table>
             <TableHead sx={{ bgcolor: '#fcfcfd' }}>
               <TableRow>
                 <TableCell sx={{ fontWeight: 700, fontSize: '0.75rem', textTransform: 'uppercase' }}>Product</TableCell>
                 <TableCell width={140} sx={{ fontWeight: 700, fontSize: '0.75rem', textTransform: 'uppercase' }}>Qty</TableCell>
-                <TableCell width={160} sx={{ fontWeight: 700, fontSize: '0.75rem', textTransform: 'uppercase' }}>Unit (ex. GST)</TableCell>
+                <TableCell width={160} sx={{ fontWeight: 700, fontSize: '0.75rem', textTransform: 'uppercase' }}>Unit (Cost)</TableCell>
                 <TableCell width={140} sx={{ fontWeight: 700, fontSize: '0.75rem', textTransform: 'uppercase' }}>Subtotal</TableCell>
                 <TableCell width={60}></TableCell>
               </TableRow>
@@ -173,10 +178,21 @@ export default function CreatePurchaseOrder() {
                     <TextField
                       select fullWidth size="small" value={item.product_id}
                       onChange={(e) => updateItem(index, 'product_id', Number(e.target.value))}
+                      SelectProps={{
+                        MenuProps: {
+                        PaperProps: {
+                            style: {
+                                maxHeight: 300, // Limits height to 300px
+                            },
+                        }},
+                    }}
                     >
                       {products.map((p) => (
                         <MenuItem key={p.product_id} value={p.product_id}>
-                          {p.product_name} <Typography variant="caption" sx={{ ml: 1, color: 'text.secondary' }}>({p.sku})</Typography>
+                          <Stack direction="row" justifyContent="space-between" sx={{ width: '100%' }}>
+                            <Typography variant="body2" fontWeight="600">{p.product_name}</Typography>
+                            <Typography variant="caption" sx={{ bgcolor: 'neutral.50', px: 1, borderRadius: 1 }}>{p.sku}</Typography>
+                          </Stack>
                         </MenuItem>
                       ))}
                     </TextField>
@@ -210,11 +226,10 @@ export default function CreatePurchaseOrder() {
 
         <Button startIcon={<PlusIcon />} onClick={handleAddItem} sx={{ fontWeight: 600 }}>Add Item</Button>
 
-        {/* Financial Summary */}
         <Box sx={{ mt: 4, p: 3, bgcolor: '#fcfcfd', borderRadius: 4, border: '1px solid #eaecf0', ml: 'auto', width: { xs: '100%', md: 350 } }}>
            <Stack spacing={1.5}>
               <Stack direction="row" justifyContent="space-between">
-                <Typography variant="body2" color="text.secondary">Subtotal (Net):</Typography>
+                <Typography variant="body2" color="text.secondary">Subtotal (Cost):</Typography>
                 <Typography variant="body2" fontWeight="600">${totals.subtotal.toFixed(2)}</Typography>
               </Stack>
               <Stack direction="row" justifyContent="space-between">
@@ -223,7 +238,7 @@ export default function CreatePurchaseOrder() {
               </Stack>
               <Divider />
               <Stack direction="row" justifyContent="space-between" alignItems="center">
-                <Typography variant="subtitle1" fontWeight="800">Total (Inc. GST):</Typography>
+                <Typography variant="subtitle1" fontWeight="800">Total Capital Outlay:</Typography>
                 <Typography variant="h5" fontWeight="900" color="primary.main">${totals.grandTotal.toFixed(2)}</Typography>
               </Stack>
            </Stack>
@@ -232,18 +247,11 @@ export default function CreatePurchaseOrder() {
 
       <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 2, mt: 3, pb: 4 }}>
         <Button variant="outlined" onClick={() => router.push('/dashboard/purchases')} sx={{ borderRadius: 2.5 }}>Cancel</Button>
-        <Button 
-            variant="contained" 
-            onClick={handleSubmit} 
-            disabled={isSubmitting}
-            size="large" 
-            sx={{ borderRadius: 2.5, px: 4, fontWeight: 700 }}
-        >
+        <Button variant="contained" onClick={handleSubmit} disabled={isSubmitting} size="large" sx={{ borderRadius: 2.5, px: 4, fontWeight: 700 }}>
           {isSubmitting ? 'Processing...' : 'Create Purchase Order'}
         </Button>
       </Box>
 
-      {/* Global Snackbar Connection */}
       <GlobalSnackbar state={notification} onClose={hideNotification} />
     </Box>
   );

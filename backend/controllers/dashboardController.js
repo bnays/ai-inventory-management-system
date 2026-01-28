@@ -11,7 +11,7 @@ exports.getDashboardSummary = async (req, res) => {
             customerCount: 'SELECT COUNT(*) as count FROM customers',
             salesTotal: 'SELECT COALESCE(SUM(total_amount), 0) as total FROM sale_orders',
             inventoryValue: `
-                SELECT COALESCE(SUM(p.unit_price * i.quantity_on_hand), 0) as val 
+                SELECT COALESCE(SUM((p.unit_price / 1.4) * i.quantity_on_hand), 0) as val 
                 FROM products p 
                 JOIN inventory i ON p.product_id = i.product_id`,
             custTrend: `
@@ -25,9 +25,15 @@ exports.getDashboardSummary = async (req, res) => {
                   COALESCE(SUM(CASE WHEN last_updated BETWEEN DATE_SUB(NOW(), INTERVAL 60 DAY) AND DATE_SUB(NOW(), INTERVAL 31 DAY) THEN quantity_on_hand END), 0) as last_inv
                 FROM inventory`,
             comparativeSales: `
-                SELECT YEAR(created_at) as year_val, MONTH(created_at) as month_num, COALESCE(SUM(total_amount), 0) as total
-                FROM sale_orders WHERE YEAR(created_at) IN (${currentYear}, ${lastYear})
-                GROUP BY year_val, month_num ORDER BY year_val DESC, month_num ASC`,
+                        SELECT 
+                            DATE_FORMAT(created_at, '%b') as month_label,
+                            YEAR(created_at) as year_val,
+                            MONTH(created_at) as month_num,
+                            COALESCE(SUM(total_amount), 0) as total
+                        FROM sale_orders 
+                        WHERE created_at >= DATE_SUB(NOW(), INTERVAL 12 MONTH)
+                        GROUP BY year_val, month_num, month_label 
+                        ORDER BY year_val ASC, month_num ASC`,
             topCategories: `
                 SELECT c.name as label, COALESCE(SUM(soi.quantity * soi.unit_price), 0) as revenue
                 FROM categories c JOIN products p ON c.id = p.category_id
@@ -53,7 +59,7 @@ exports.getDashboardSummary = async (req, res) => {
                 FROM products p
                 JOIN inventory i ON p.product_id = i.product_id
                 ORDER BY i.last_updated DESC 
-                LIMIT 5`
+                LIMIT 7`
         };
 
         // Execute all 11 queries

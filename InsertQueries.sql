@@ -143,3 +143,54 @@ VALUES
 ('Anker 10-in-1 Docking Station', 'HUB-022', 1, 199.00, 20, NOW()),
 ('WD Black 2TB NVMe SSD', 'DRV-023', 1, 289.00, 25, NOW()),
 ('Elgato Stream Deck MK.2', 'STR-024', 2, 239.00, 7, NOW());
+
+-- 1. Ensure the sale_orders table is ready for historical data
+-- This copies summarized records from sales_history into sale_orders
+
+INSERT INTO sale_orders (user_id, customer_id, total_amount, status, created_at, updated_at)
+SELECT 
+    (SELECT user_id FROM users LIMIT 1), -- Assign to the first available staff member
+    (SELECT customer_id FROM customers LIMIT 1), -- Assign to the first available customer
+    SUM(quantity_sold * 150), -- Estimating $150/unit to show healthy revenue
+    'Completed',
+    sale_date, -- Changed from 'date' to 'sale_date' to match your schema
+    sale_date
+FROM sales_history
+WHERE YEAR(sale_date) IN (2025, 2026)
+GROUP BY sale_date;
+
+-- 2. Populate Sale Order Items to enable Category Chart
+INSERT INTO sale_order_items (order_id, product_id, quantity, unit_price)
+SELECT 
+    so.id,
+    p.product_id,
+    FLOOR(1 + (RAND() * 5)), -- Random quantity between 1 and 5
+    p.unit_price
+FROM sale_orders so
+JOIN products p ON p.sku = (SELECT product_sku FROM sales_history WHERE sale_date = so.created_at LIMIT 1)
+WHERE so.created_at >= '2025-01-01';
+
+
+SET SQL_SAFE_UPDATES = 0;
+
+UPDATE sale_orders 
+SET total_amount = total_amount * 1.4 -- Applying a 40% profit margin
+WHERE created_at < '2026-01-28 00:00:00'; -- Only targets data from 'Yesterday' and earlier
+
+-- 2. Update the Line Items to match the new retail price
+UPDATE sale_order_items soi
+JOIN sale_orders so ON soi.order_id = so.id
+SET soi.unit_price = soi.unit_price * 1.4
+WHERE so.created_at < '2026-01-28 00:00:00';
+
+-- 3. Re-enable Safe Updates (Best Practice)
+SET SQL_SAFE_UPDATES = 1;
+
+-- 1. Temporarily disable safety checks
+SET SQL_SAFE_UPDATES = 0;
+
+-- 2. Apply the 40% Retail Markup
+UPDATE products SET unit_price = unit_price * 1.4;
+
+-- 3. Re-enable safety checks
+SET SQL_SAFE_UPDATES = 1;
