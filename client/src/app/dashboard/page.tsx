@@ -37,7 +37,7 @@ export default function Page(): React.JSX.Element {
   if (loading || !data) {
     return (
       <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', py: 15, bgcolor: '#f9fafb', minHeight: '100vh' }}>
-        <CircularProgress size={45} thickness={4} />
+        <CircularProgress size={45} thickness={4} aria-label="Loading dashboard data" />
         <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>Synchronizing Command Center data...</Typography>
       </Box>
     );

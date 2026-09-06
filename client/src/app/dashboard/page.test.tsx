@@ -93,8 +93,12 @@ describe('Dashboard Page (FE1)', () => {
 
     renderPage();
 
-    // Loading state is shown while the request is in flight.
-    expect(screen.getByRole('progressbar')).toBeInTheDocument();
+    // Loading state is shown while the request is in flight. Scoped to the
+    // dashboard's own spinner by accessible name -- TasksProgress renders its
+    // own, unrelated role="progressbar" element (its Stock Health Score
+    // meter) once real data is present, so a blanket role query would still
+    // match after the dashboard has finished loading.
+    expect(screen.getByRole('progressbar', { name: 'Loading dashboard data' })).toBeInTheDocument();
     expect(mockApiRequest).toHaveBeenCalledWith('/dashboard/summary');
     expect(mockApiRequest).toHaveBeenCalledTimes(1);
 
@@ -102,7 +106,7 @@ describe('Dashboard Page (FE1)', () => {
     resolveFetch!({ success: true, data: fullSummary });
 
     await waitFor(() => {
-      expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
+      expect(screen.queryByRole('progressbar', { name: 'Loading dashboard data' })).not.toBeInTheDocument();
     });
 
     // KPI cards render the values from the response, correctly formatted.
@@ -130,7 +134,7 @@ describe('Dashboard Page (FE1)', () => {
     renderPage();
 
     await waitFor(() => {
-      expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
+      expect(screen.queryByRole('progressbar', { name: 'Loading dashboard data' })).not.toBeInTheDocument();
     });
 
     // LatestProducts falls back to its own empty-state copy.

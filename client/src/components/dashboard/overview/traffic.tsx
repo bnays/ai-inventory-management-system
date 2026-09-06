@@ -15,11 +15,15 @@ export interface TrafficProps {
 }
 
 export function Traffic({ chartSeries, labels, sx }: TrafficProps): React.JSX.Element {
-  const chartOptions = useChartOptions(labels);
+  // chartSeries/labels can arrive undefined while the parent is still loading
+  // or if the API response omits categoryData -- guard both before any array op.
+  const safeChartSeries = chartSeries ?? [];
+  const safeLabels = labels ?? [];
+  const chartOptions = useChartOptions(safeLabels);
 
   // Normalize data for display if backend sends raw numbers
-  const total = chartSeries.reduce((a, b) => a + b, 0);
-  const normalizedSeries = chartSeries.map(val => total > 0 ? Number(((val / total) * 100).toFixed(1)) : 0);
+  const total = safeChartSeries.reduce((a, b) => a + b, 0);
+  const normalizedSeries = safeChartSeries.map(val => total > 0 ? Number(((val / total) * 100).toFixed(1)) : 0);
 
   return (
     <Card sx={{ ...sx, display: 'flex', flexDirection: 'column' }}>
@@ -36,26 +40,29 @@ export function Traffic({ chartSeries, labels, sx }: TrafficProps): React.JSX.El
             gap: 2, 
             textAlign: 'center' 
           }}>
-            {normalizedSeries.map((item, index) => (
-              <Stack key={labels[index]} spacing={0.5}>
-                <Typography 
-                  variant="caption" 
-                  fontWeight="bold" 
-                  sx={{ 
-                    whiteSpace: 'nowrap', 
-                    overflow: 'hidden', 
-                    textOverflow: 'ellipsis', 
-                    display: 'block' 
-                  }}
-                  title={labels[index]}
-                >
-                  {labels[index]}
-                </Typography>
-                <Typography color="text.secondary" variant="body2">
-                  {item}%
-                </Typography>
-              </Stack>
-            ))}
+            {normalizedSeries.map((item, index) => {
+              const label = safeLabels[index] ?? `Category ${index + 1}`;
+              return (
+                <Stack key={label} spacing={0.5}>
+                  <Typography
+                    variant="caption"
+                    fontWeight="bold"
+                    sx={{
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      display: 'block'
+                    }}
+                    title={label}
+                  >
+                    {label}
+                  </Typography>
+                  <Typography color="text.secondary" variant="body2">
+                    {item}%
+                  </Typography>
+                </Stack>
+              );
+            })}
           </Box>
         </Stack>
       </CardContent>
