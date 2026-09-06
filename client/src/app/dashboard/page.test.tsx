@@ -94,7 +94,7 @@ describe('Dashboard Page (FE1)', () => {
     renderPage();
 
     // Loading state is shown while the request is in flight.
-    expect(screen.getByText(/synchronizing/i)).toBeInTheDocument();
+    expect(screen.getByRole('progressbar')).toBeInTheDocument();
     expect(mockApiRequest).toHaveBeenCalledWith('/dashboard/summary');
     expect(mockApiRequest).toHaveBeenCalledTimes(1);
 
@@ -102,7 +102,7 @@ describe('Dashboard Page (FE1)', () => {
     resolveFetch!({ success: true, data: fullSummary });
 
     await waitFor(() => {
-      expect(screen.queryByText(/synchronizing/i)).not.toBeInTheDocument();
+      expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
     });
 
     // KPI cards render the values from the response, correctly formatted.
@@ -130,7 +130,7 @@ describe('Dashboard Page (FE1)', () => {
     renderPage();
 
     await waitFor(() => {
-      expect(screen.queryByText(/synchronizing/i)).not.toBeInTheDocument();
+      expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
     });
 
     // LatestProducts falls back to its own empty-state copy.
